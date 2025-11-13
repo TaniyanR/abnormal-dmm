@@ -1,0 +1,24 @@
+# Environment variables
+.env
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PHP
+vendor/
+composer.phar
+
+# Logs
+*.log
+
+# Temporary files
+/tmp/
+*.tmp
