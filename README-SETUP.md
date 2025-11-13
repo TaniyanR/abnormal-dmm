@@ -2,6 +2,8 @@
 
 This is the initial scaffolding for the abnormal-dmm Video Store DMM/FANZA integration project.
 
+**Branch:** `feature/dmm-scaffold`
+
 ## 🚀 Quick Start
 
 ### Prerequisites
