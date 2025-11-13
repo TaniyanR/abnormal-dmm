@@ -1,5 +1,5 @@
 -- Initialize database and schema for Video Store (DMM/FANZA integration)
-CREATE DATABASE IF NOT EXISTS `video_store` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS `video_store` CHARACTER SET utf8mb4 COLLATE=utf8mb4_unicode_ci;
 USE `video_store`;
 
 -- items: main table for video/product items

@@ -2,26 +2,30 @@ version: '3.8'
 
 services:
   db:
-    image: mariadb:10.6
+    image: mariadb:10.11
     container_name: video_store_db
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      # Use values from .env when present, otherwise fall back to safe development defaults
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password_change_me}
       MYSQL_DATABASE: ${DB_NAME:-video_store}
       MYSQL_USER: ${DB_USER:-video_user}
       MYSQL_PASSWORD: ${DB_PASSWORD:-video_pass_change_me}
+      TZ: ${TIMEZONE:-Asia/Tokyo}
     ports:
       - "${DB_PORT:-3306}:3306"
     volumes:
       - db_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
     networks:
       - video_store_network
 
 volumes:
   db_data:
+    driver: local
 
 networks:
   video_store_network:

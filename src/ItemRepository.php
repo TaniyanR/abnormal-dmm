@@ -19,7 +19,7 @@ class ItemRepository {
     /**
      * Search items with optional filters
      *
-     * @param array $filters ['keyword' => string, 'limit' => int, 'offset' => int]
+     * @param array $filters ['keyword' => string, 'genre_id' => int|null, 'actress_id' => int|null, 'limit' => int, 'offset' => int]
      * @return array List of items
      */
     public function search($filters = []) {
@@ -31,22 +31,53 @@ class ItemRepository {
         $limit = max(1, min($limit, 100));
         $offset = max(0, $offset);
 
-        $sql = 'SELECT * FROM items WHERE 1=1';
+        $sql = 'SELECT i.* FROM items i WHERE 1=1';
         $params = [];
 
+        // Keyword search
         if (!empty($keyword)) {
-            $sql .= ' AND (title LIKE :keyword OR description LIKE :keyword OR content_id LIKE :keyword)';
+            $sql .= ' AND (i.title LIKE :keyword OR i.description LIKE :keyword OR i.content_id LIKE :keyword)';
             $params[':keyword'] = '%' . $keyword . '%';
         }
 
-        $sql .= ' ORDER BY release_date DESC, created_at DESC';
+        // Genre filter (by external genre id or internal id)
+        if (!empty($filters['genre_id'])) {
+            $sql .= ' AND i.id IN (
+                SELECT ig.item_id FROM item_genres ig
+                INNER JOIN genres g ON ig.genre_id = g.id
+                WHERE (g.id = :genre_internal_id OR g.dmm_id = :genre_external_id OR g.genre_id = :genre_external_text)
+            )';
+            // Bind same value to possible keys; repository caller may pass numeric or string
+            $params[':genre_internal_id'] = $filters['genre_id'];
+            $params[':genre_external_id'] = $filters['genre_id'];
+            $params[':genre_external_text'] = $filters['genre_id'];
+        }
+
+        // Actress filter
+        if (!empty($filters['actress_id'])) {
+            $sql .= ' AND i.id IN (
+                SELECT ia.item_id FROM item_actresses ia
+                INNER JOIN actresses a ON ia.actress_id = a.id
+                WHERE (a.id = :actress_internal_id OR a.dmm_id = :actress_external_id OR a.actress_id = :actress_external_text)
+            )';
+            $params[':actress_internal_id'] = $filters['actress_id'];
+            $params[':actress_external_id'] = $filters['actress_id'];
+            $params[':actress_external_text'] = $filters['actress_id'];
+        }
+
+        $sql .= ' ORDER BY i.release_date DESC, i.created_at DESC';
         $sql .= ' LIMIT :limit OFFSET :offset';
 
         $stmt = $this->pdo->prepare($sql);
 
         // Bind dynamic params
         foreach ($params as $k => $v) {
-            $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            // decide type
+            if (is_int($v)) {
+                $stmt->bindValue($k, $v, PDO::PARAM_INT);
+            } else {
+                $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            }
         }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);

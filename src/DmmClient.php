@@ -124,4 +124,37 @@ class DmmClient
 
         return null;
     }
+
+    /**
+     * Normalize a DMM API response into a simplified array (optional helper)
+     *
+     * @param array $apiResponse
+     * @return array ['total_count' => int, 'items' => array]
+     */
+    public function normalizeResponse(array $apiResponse)
+    {
+        $items = $apiResponse['result']['items'] ?? [];
+        $normalizedItems = [];
+
+        foreach ($items as $item) {
+            $normalizedItems[] = [
+                'content_id' => $item['content_id'] ?? ($item['cid'] ?? ''),
+                'title' => $item['title'] ?? '',
+                'description' => $item['iteminfo']['product_description'] ?? ($item['description'] ?? null),
+                'sample_video_url' => $item['sampleMovieURL']['size_560_360'] ?? ($item['sampleMovieURL']['size_476_306'] ?? null),
+                'price' => isset($item['prices']['price']) ? (int)preg_replace('/[^0-9]/', '', (string)$item['prices']['price']) : null,
+                'release_date' => isset($item['date']) ? date('Y-m-d', strtotime($item['date'])) : null,
+                'affiliate_url' => $item['affiliateURL'] ?? ($item['affiliate_url'] ?? null),
+                'thumbnail_url' => $item['imageURL']['large'] ?? ($item['imageURL']['small'] ?? null),
+                'genres' => $item['iteminfo']['genre'] ?? [],
+                'actresses' => $item['iteminfo']['actress'] ?? [],
+                'maker' => $item['iteminfo']['maker'][0] ?? null,
+            ];
+        }
+
+        return [
+            'total_count' => $apiResponse['result']['total_count'] ?? 0,
+            'items' => $normalizedItems,
+        ];
+    }
 }

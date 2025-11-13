@@ -47,7 +47,9 @@ $defaults = [
     'DMM_API_ID' => '',
     'DMM_AFFILIATE_ID' => '',
     'DMM_API_ENDPOINT' => 'https://api.dmm.com/affiliate/v3/ItemList',
-    'ADMIN_TOKEN' => ''
+    'ADMIN_TOKEN' => '',
+    'APP_ENV' => 'development',
+    'APP_DEBUG' => 'true',
 ];
 
 foreach ($defaults as $k => $v) {
@@ -80,6 +82,11 @@ $config = [
     ],
     'admin' => [
         'token' => getenv('ADMIN_TOKEN'),
+    ],
+    'app' => [
+        'env' => getenv('APP_ENV'),
+        'debug' => filter_var(getenv('APP_DEBUG'), FILTER_VALIDATE_BOOLEAN),
+        'timezone' => getenv('TIMEZONE') ?: 'UTC',
     ],
 ];
 
