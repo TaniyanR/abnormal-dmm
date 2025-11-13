@@ -83,7 +83,7 @@ GET http://localhost:8000/api/items/{content_id}
 
 ### 3. Fetch Items from DMM API (POST - Admin Only) / 管理者限定取得
 ```bash
-curl -X POST http://localhost:8000/admin/fetch-items \
+curl -X POST http://localhost:8000/api/admin/fetch \
   -H "Authorization: Bearer your_admin_token" \
   -H "Content-Type: application/json" \
   -d '{"hits": 20, "offset": 1}'
