@@ -1,0 +1,23 @@
+# Environment configuration
+.env
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PHP
+vendor/
+composer.phar
+
+# Logs
+*.log
+
+# Temporary files
+/tmp/

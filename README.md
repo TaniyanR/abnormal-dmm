@@ -6,6 +6,132 @@ A-01【abnormal-dmm(アブノーマル-DMM)】DMMでサンプル動画表示
 
 ---
 
+## 🚀 Quick Start / セットアップ
+
+This project uses Docker Compose for the database and plain PHP for the application.
+
+### Prerequisites / 必要なもの
+- Docker & Docker Compose
+- PHP 8.0 or higher
+- DMM Affiliate API credentials (get from: https://affiliate.dmm.com/)
+
+### Setup Instructions / セットアップ手順
+
+1. **Clone the repository / リポジトリをクローン**
+   ```bash
+   git clone https://github.com/TaniyanR/abnormal-dmm.git
+   cd abnormal-dmm
+   ```
+
+2. **Configure environment variables / 環境変数を設定**
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit `.env` and add your DMM API credentials:
+   ```
+   DMM_API_ID=your_api_id_here
+   DMM_AFFILIATE_ID=your_affiliate_id_here
+   ADMIN_TOKEN=your_secure_random_token_here
+   ```
+
+3. **Start the database / データベースを起動**
+   ```bash
+   docker-compose up -d
+   ```
+   
+   This will:
+   - Start a MariaDB container
+   - Automatically create the `video_store` database
+   - Initialize all required tables
+
+4. **Start the PHP development server / PHP開発サーバーを起動**
+   ```bash
+   php -S localhost:8000 -t public
+   ```
+
+5. **Access the API / APIにアクセス**
+   
+   Open your browser or API client to: http://localhost:8000
+
+### API Endpoints / APIエンドポイント
+
+#### Get Items List / アイテム一覧を取得
+```bash
+GET http://localhost:8000/api/items
+```
+
+Optional query parameters:
+- `keyword`: Search by title or description
+- `limit`: Number of items to return (default: 20, max: 100)
+- `offset`: Pagination offset (default: 0)
+
+Example:
+```bash
+curl "http://localhost:8000/api/items?limit=10&offset=0"
+```
+
+#### Get Specific Item / 特定のアイテムを取得
+```bash
+GET http://localhost:8000/api/items/{content_id}
+```
+
+Example:
+```bash
+curl "http://localhost:8000/api/items/example_content_id"
+```
+
+#### Fetch Items from DMM API / DMM APIからアイテムを取得 (Admin Only)
+```bash
+POST http://localhost:8000/admin/fetch-items
+Authorization: Bearer YOUR_ADMIN_TOKEN
+Content-Type: application/json
+
+{
+  "hits": 20,
+  "offset": 1
+}
+```
+
+Example with curl:
+```bash
+curl -X POST http://localhost:8000/admin/fetch-items \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"hits": 20, "offset": 1}'
+```
+
+### Database Management / データベース管理
+
+**Stop the database:**
+```bash
+docker-compose down
+```
+
+**Stop and remove all data:**
+```bash
+docker-compose down -v
+```
+
+**View database logs:**
+```bash
+docker-compose logs db
+```
+
+**Connect to the database directly:**
+```bash
+docker-compose exec db mysql -u dbuser -p video_store
+```
+
+### Development Notes / 開発メモ
+
+- The database is automatically initialized on first run using `db/init.sql`
+- Database data persists in a Docker volume
+- PHP files are loaded from the repository, so changes are immediately visible
+- For production deployment, consider using a proper web server (Apache/Nginx) instead of PHP's built-in server
+
+---
+
 ## 🚀 概要
 
 abnormal-dmm は **DMMアフィリエイトAPI** を利用して動画を自動取得し、
