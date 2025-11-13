@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:latest
+    container_name: video_store_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-video_store}
+      MYSQL_USER: ${DB_USER:-video_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-videopass}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - video_store_network
+
+volumes:
+  mariadb_data:
+
+networks:
+  video_store_network:
+    driver: bridge
