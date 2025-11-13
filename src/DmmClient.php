@@ -1,105 +1,151 @@
 <?php
 /**
- * DmmClient - DMM API client for fetching items
+ * src/DmmClient.php
+ * Simple DMM / FANZA API client for ItemList (v3)
+ *
+ * The client accepts optional constructor parameters (apiId, affiliateId, endpoint).
+ * If not provided, values are read from environment variables:
+ *  - DMM_API_ID
+ *  - DMM_AFFILIATE_ID
+ *  - DMM_API_ENDPOINT (optional, defaults to ItemList endpoint)
+ *
+ * Methods:
+ *  - fetchItems(array $params): array|false  (returns decoded response array on success, false on failure)
+ *  - getRecentItems(int $hits, int $offset): array|false
+ *  - getItemByContentId(string $contentId): array|null
  */
 
 class DmmClient
 {
-    private string $apiId;
-    private string $affiliateId;
-    private string $apiEndpoint;
+    private $apiId;
+    private $affiliateId;
+    private $endpoint;
 
-    public function __construct(
-        string $apiId,
-        string $affiliateId,
-        string $apiEndpoint = 'https://api.dmm.com/affiliate/v3/ItemList'
-    ) {
-        $this->apiId = $apiId;
-        $this->affiliateId = $affiliateId;
-        $this->apiEndpoint = $apiEndpoint;
+    public function __construct(string $apiId = null, string $affiliateId = null, string $endpoint = null)
+    {
+        $this->apiId = $apiId ?: getenv('DMM_API_ID') ?: '';
+        $this->affiliateId = $affiliateId ?: getenv('DMM_AFFILIATE_ID') ?: '';
+        $this->endpoint = $endpoint ?: getenv('DMM_API_ENDPOINT') ?: 'https://api.dmm.com/affiliate/v3/ItemList';
     }
 
     /**
-     * Fetch items from DMM API
+     * Fetch items from DMM ItemList API
      *
-     * @param array $params Query parameters (hits, offset, keyword, etc.)
-     * @return array API response with items
-     * @throws RuntimeException If API call fails
+     * @param array $params Query parameters (hits, offset, keyword, site, service, floor, sort, etc.)
+     * @return array|false Decoded JSON response array on success, false on failure
      */
-    public function fetchItems(array $params = []): array
+    public function fetchItems(array $params = [])
     {
+        // Ensure credentials exist
         if (empty($this->apiId) || empty($this->affiliateId)) {
-            throw new RuntimeException("DMM API credentials not configured");
+            error_log('DmmClient: API credentials are not configured.');
+            return false;
         }
 
-        // Build query parameters
-        $queryParams = array_merge([
+        $default = [
             'api_id' => $this->apiId,
             'affiliate_id' => $this->affiliateId,
-            'site' => 'FANZA',
-            'service' => 'digital',
-            'floor' => 'videoa',
-            'hits' => 20,
-            'offset' => 1,
+            'site' => $params['site'] ?? 'FANZA',
+            'service' => $params['service'] ?? 'digital',
+            'floor' => $params['floor'] ?? 'videoa',
+            'hits' => isset($params['hits']) ? (int)$params['hits'] : 20,
+            'offset' => isset($params['offset']) ? (int)$params['offset'] : 1,
+            'sort' => $params['sort'] ?? 'date',
             'output' => 'json',
-        ], $params);
+        ];
 
-        $url = $this->apiEndpoint . '?' . http_build_query($queryParams);
+        // Merge defaults with user-supplied params (user params override defaults)
+        $query = array_merge($default, $params);
 
-        // Make API request
+        $url = $this->endpoint . '?' . http_build_query($query);
+
         $context = stream_context_create([
             'http' => [
                 'method' => 'GET',
-                'header' => 'User-Agent: abnormal-dmm/1.0',
                 'timeout' => 30,
-            ],
+                'header' => "User-Agent: VideoStore/1.0\r\nAccept: application/json\r\n"
+            ]
         ]);
 
-        $response = @file_get_contents($url, false, $context);
-
-        if ($response === false) {
-            $error = error_get_last();
-            throw new RuntimeException("DMM API request failed: " . ($error['message'] ?? 'Unknown error'));
+        $raw = @file_get_contents($url, false, $context);
+        if ($raw === false) {
+            error_log("DmmClient: HTTP request failed for URL: {$url}");
+            return false;
         }
 
-        $data = json_decode($response, true);
-
+        $data = json_decode($raw, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new RuntimeException("Invalid JSON response from DMM API");
+            error_log('DmmClient: JSON decode error: ' . json_last_error_msg());
+            return false;
         }
 
-        if (isset($data['result']['status']) && $data['result']['status'] !== 200) {
-            throw new RuntimeException(
-                "DMM API error: " . ($data['result']['message'] ?? 'Unknown error')
-            );
+        // Basic validation: ensure result exists
+        if (!isset($data['result'])) {
+            error_log('DmmClient: Unexpected API response (missing result).');
+            return false;
         }
 
-        return $this->normalizeResponse($data);
+        return $data;
     }
 
     /**
-     * Normalize DMM API response to internal format
+     * Convenience method to fetch recent items (sorted by date).
      *
-     * @param array $apiResponse Raw API response
-     * @return array Normalized response
+     * @param int $hits
+     * @param int $offset
+     * @return array|false
      */
-    private function normalizeResponse(array $apiResponse): array
+    public function getRecentItems(int $hits = 20, int $offset = 1)
+    {
+        return $this->fetchItems([
+            'hits' => $hits,
+            'offset' => $offset,
+            'sort' => 'date'
+        ]);
+    }
+
+    /**
+     * Fetch a single item by content ID (cid)
+     *
+     * @param string $contentId
+     * @return array|null First item array on success, null on not found or failure
+     */
+    public function getItemByContentId(string $contentId)
+    {
+        $resp = $this->fetchItems([
+            'cid' => $contentId,
+            'hits' => 1
+        ]);
+
+        if ($resp === false) return null;
+        if (isset($resp['result']['items']) && is_array($resp['result']['items']) && count($resp['result']['items']) > 0) {
+            return $resp['result']['items'][0];
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalize a DMM API response into a simplified array (optional helper)
+     *
+     * @param array $apiResponse
+     * @return array ['total_count' => int, 'items' => array]
+     */
+    public function normalizeResponse(array $apiResponse)
     {
         $items = $apiResponse['result']['items'] ?? [];
         $normalizedItems = [];
 
         foreach ($items as $item) {
             $normalizedItems[] = [
-                'content_id' => $item['content_id'] ?? '',
+                'content_id' => $item['content_id'] ?? ($item['cid'] ?? ''),
                 'title' => $item['title'] ?? '',
-                'description' => $item['iteminfo']['genre'][0]['name'] ?? null,
-                // Prefer higher resolution video (560x360) over lower resolution (476x306)
-                'sample_video_url' => $item['sampleMovieURL']['size_560_360'] ?? 
-                                     $item['sampleMovieURL']['size_476_306'] ?? null,
-                'price' => isset($item['prices']['price']) ? (int)str_replace(',', '', $item['prices']['price']) : null,
+                'description' => $item['iteminfo']['product_description'] ?? ($item['description'] ?? null),
+                'sample_video_url' => $item['sampleMovieURL']['size_560_360'] ?? ($item['sampleMovieURL']['size_476_306'] ?? null),
+                'price' => isset($item['prices']['price']) ? (int)preg_replace('/[^0-9]/', '', (string)$item['prices']['price']) : null,
                 'release_date' => isset($item['date']) ? date('Y-m-d', strtotime($item['date'])) : null,
-                'affiliate_url' => $item['affiliateURL'] ?? null,
-                'thumbnail_url' => $item['imageURL']['large'] ?? $item['imageURL']['small'] ?? null,
+                'affiliate_url' => $item['affiliateURL'] ?? ($item['affiliate_url'] ?? null),
+                'thumbnail_url' => $item['imageURL']['large'] ?? ($item['imageURL']['small'] ?? null),
                 'genres' => $item['iteminfo']['genre'] ?? [],
                 'actresses' => $item['iteminfo']['actress'] ?? [],
                 'maker' => $item['iteminfo']['maker'][0] ?? null,
@@ -110,55 +156,5 @@ class DmmClient
             'total_count' => $apiResponse['result']['total_count'] ?? 0,
             'items' => $normalizedItems,
         ];
-    }
-
-    /**
-     * Search items by keyword
-     *
-     * @param string $keyword Search keyword
-     * @param int $hits Number of items to fetch
-     * @param int $offset Offset for pagination
-     * @return array API response with items
-     */
-    public function searchByKeyword(string $keyword, int $hits = 20, int $offset = 1): array
-    {
-        return $this->fetchItems([
-            'keyword' => $keyword,
-            'hits' => $hits,
-            'offset' => $offset,
-        ]);
-    }
-
-    /**
-     * Fetch items by actress ID
-     *
-     * @param string $actressId Actress ID
-     * @param int $hits Number of items to fetch
-     * @param int $offset Offset for pagination
-     * @return array API response with items
-     */
-    public function fetchByActress(string $actressId, int $hits = 20, int $offset = 1): array
-    {
-        return $this->fetchItems([
-            'actress' => $actressId,
-            'hits' => $hits,
-            'offset' => $offset,
-        ]);
-    }
-
-    /**
-     * Fetch latest items
-     *
-     * @param int $hits Number of items to fetch
-     * @param int $offset Offset for pagination
-     * @return array API response with items
-     */
-    public function fetchLatest(int $hits = 20, int $offset = 1): array
-    {
-        return $this->fetchItems([
-            'sort' => 'date',
-            'hits' => $hits,
-            'offset' => $offset,
-        ]);
     }
 }

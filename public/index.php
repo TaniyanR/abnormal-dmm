@@ -1,180 +1,181 @@
 <?php
 /**
- * Main API entry point
+ * Front controller for Video Store API
+ *
  * Routes:
- * - GET /api/items - Search items
- * - GET /api/items/{content_id} - Get item details
- * - POST /api/admin/fetch - Fetch items from DMM API (requires admin token)
+ *   GET  /api/items               - list items (keyword, limit, offset)
+ *   GET  /api/items/{content_id}  - get single item by content_id
+ *   POST /api/admin/fetch         - fetch items from DMM API (requires X-Admin-Token header)
  */
 
-require_once __DIR__ . '/../src/bootstrap.php';
+$bootstrap = require __DIR__ . '/../src/bootstrap.php';
+$pdo = $bootstrap['pdo'];
+$config = $bootstrap['config'];
+
+require_once __DIR__ . '/../src/helpers.php';
 require_once __DIR__ . '/../src/ItemRepository.php';
 require_once __DIR__ . '/../src/DmmClient.php';
 
-// Set error handling
-error_reporting(APP_DEBUG ? E_ALL : 0);
-ini_set('display_errors', APP_DEBUG ? '1' : '0');
+// Error reporting (enable more in development)
+$appEnv = getenv('APP_ENV') ?: 'development';
+$appDebug = getenv('APP_DEBUG') === 'true' || getenv('APP_DEBUG') === '1';
+error_reporting($appDebug ? E_ALL : 0);
+ini_set('display_errors', $appDebug ? '1' : '0');
 
-// Enable CORS (configure for production environment)
-$allowedOrigin = APP_ENV === 'production' ? 
-    (env('CORS_ALLOWED_ORIGIN', 'https://yourdomain.com')) : '*';
+// Default JSON header and CORS
+$allowedOrigin = getenv('CORS_ALLOWED_ORIGIN') ?: '*';
+header('Content-Type: application/json; charset=utf-8');
 header("Access-Control-Allow-Origin: {$allowedOrigin}");
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-Admin-Token');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Admin-Token');
 
-// Handle OPTIONS request
+// Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 
-// Parse request
-$requestUri = $_SERVER['REQUEST_URI'];
+// Request variables
 $requestMethod = $_SERVER['REQUEST_METHOD'];
-$parsedUrl = parse_url($requestUri);
-$path = $parsedUrl['path'] ?? '/';
+$requestPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
-// Remove script name if present
-$scriptName = dirname($_SERVER['SCRIPT_NAME']);
-if ($scriptName !== '/') {
-    $path = substr($path, strlen($scriptName));
+// Helper to read JSON body
+function getJsonBody() {
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
 }
 
-// Route handling
 try {
-    $pdo = getDbConnection();
-    $itemRepository = new ItemRepository($pdo);
-    
-    // GET /api/items - Search items
-    if ($requestMethod === 'GET' && preg_match('#^/?api/items/?$#', $path)) {
+    // GET /api/items
+    if ($requestMethod === 'GET' && preg_match('#^/api/items/?$#', $requestPath)) {
         $filters = [
-            'keyword' => $_GET['keyword'] ?? null,
+            'keyword' => $_GET['keyword'] ?? '',
             'genre_id' => $_GET['genre_id'] ?? null,
             'actress_id' => $_GET['actress_id'] ?? null,
-            'limit' => isset($_GET['limit']) ? min((int)$_GET['limit'], 100) : 20,
+            'limit' => isset($_GET['limit']) ? (int)$_GET['limit'] : 20,
             'offset' => isset($_GET['offset']) ? (int)$_GET['offset'] : 0,
+            'sort' => $_GET['sort'] ?? 'date',
         ];
-        
-        // Remove null values
-        $filters = array_filter($filters, fn($value) => $value !== null);
-        
-        $items = $itemRepository->search($filters);
-        $total = $itemRepository->count($filters);
-        
+
+        // sanitize
+        $filters['limit'] = max(1, min($filters['limit'], 100));
+        $filters['offset'] = max(0, $filters['offset']);
+
+        $repo = new ItemRepository($pdo);
+        $items = $repo->search($filters);
+        $total = $repo->count($filters);
+
         respondJson([
             'success' => true,
             'data' => [
                 'items' => $items,
                 'total' => $total,
-                'limit' => $filters['limit'] ?? 20,
-                'offset' => $filters['offset'] ?? 0,
-            ],
+                'limit' => $filters['limit'],
+                'offset' => $filters['offset'],
+            ]
         ]);
     }
-    
-    // GET /api/items/{content_id} - Get item details
-    if ($requestMethod === 'GET' && preg_match('#^/?api/items/([a-zA-Z0-9_-]+)/?$#', $path, $matches)) {
-        $contentId = $matches[1];
-        $item = $itemRepository->find($contentId);
-        
-        if (!$item) {
-            respondJson([
-                'success' => false,
-                'error' => 'Item not found',
-            ], 404);
+
+    // GET /api/items/{content_id}
+    if ($requestMethod === 'GET' && preg_match('#^/api/items/([^/]+)/?$#', $requestPath, $m)) {
+        $contentId = $m[1];
+        $repo = new ItemRepository($pdo);
+        $item = $repo->findByContentId($contentId);
+        if ($item) {
+            respondJson(['success' => true, 'data' => $item]);
+        } else {
+            respondJson(['success' => false, 'error' => 'Item not found'], 404);
         }
-        
+    }
+
+    // POST /api/admin/fetch
+    if ($requestMethod === 'POST' && preg_match('#^/api/admin/fetch/?$#', $requestPath)) {
+        // Accept token in X-Admin-Token header or Authorization: Bearer <token>
+        $adminTokenHeader = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        $token = '';
+
+        if (!empty($adminTokenHeader)) {
+            $token = trim($adminTokenHeader);
+        } elseif (preg_match('/Bearer\s+(.+)/i', $authHeader, $mm)) {
+            $token = trim($mm[1]);
+        }
+
+        $expected = $config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: '';
+
+        if (empty($expected) || $token !== $expected) {
+            respondJson(['success' => false, 'error' => 'Unauthorized'], 401);
+        }
+
+        $input = getJsonBody();
+        $hits = isset($input['hits']) ? (int)$input['hits'] : 20;
+        $offset = isset($input['offset']) ? (int)$input['offset'] : 1;
+        $hits = max(1, min($hits, 100));
+        $offset = max(1, $offset);
+
+        // Initialize DMM client
+        $dmm = new DmmClient(
+            $config['dmm']['api_id'] ?? null,
+            $config['dmm']['affiliate_id'] ?? null,
+            $config['dmm']['endpoint'] ?? null
+        );
+
+        $repo = new ItemRepository($pdo);
+        $start = microtime(true);
+
+        $apiResp = $dmm->fetchItems(['hits' => $hits, 'offset' => $offset]);
+
+        if ($apiResp === false || !is_array($apiResp)) {
+            // log failure
+            $stmt = $pdo->prepare('INSERT INTO fetch_logs (operation, status, items_fetched, message, created_at) VALUES (?, ?, ?, ?, NOW())');
+            $stmt->execute(['fetch_manual', 'error', 0, 'DMM API request failed']);
+            respondJson(['success' => false, 'error' => 'DMM API request failed'], 500);
+        }
+
+        // Normalize items list
+        $itemsList = [];
+        if (isset($apiResp['result']['items']) && is_array($apiResp['result']['items'])) {
+            $itemsList = $apiResp['result']['items'];
+            $totalCount = $apiResp['result']['total_count'] ?? (count($itemsList));
+        } elseif (isset($apiResp['items']) && is_array($apiResp['items'])) {
+            $itemsList = $apiResp['items'];
+            $totalCount = $apiResp['total_count'] ?? count($itemsList);
+        } else {
+            // Fallback: treat top-level array as items
+            $itemsList = is_array($apiResp) ? $apiResp : [];
+            $totalCount = count($itemsList);
+        }
+
+        $processed = 0;
+        foreach ($itemsList as $apiItem) {
+            try {
+                $repo->upsertFromApi($apiItem);
+                $processed++;
+            } catch (Exception $e) {
+                error_log('Item upsert failed: ' . $e->getMessage());
+            }
+        }
+
+        $elapsedMs = (int)((microtime(true) - $start) * 1000);
+        $stmt = $pdo->prepare('INSERT INTO fetch_logs (operation, status, items_fetched, message, created_at) VALUES (?, ?, ?, ?, NOW())');
+        $stmt->execute(['fetch_manual', 'success', $processed, "Fetched {$processed} items in {$elapsedMs} ms"]);
+
         respondJson([
             'success' => true,
-            'data' => $item,
+            'message' => "Successfully fetched and stored {$processed} items",
+            'data' => [
+                'items_processed' => $processed,
+                'total_result_count' => $totalCount,
+                'execution_ms' => $elapsedMs
+            ]
         ]);
     }
-    
-    // POST /api/admin/fetch - Fetch items from DMM API (requires admin token)
-    if ($requestMethod === 'POST' && preg_match('#^/?api/admin/fetch/?$#', $path)) {
-        // Validate admin token
-        if (!validateAdminToken()) {
-            respondJson([
-                'success' => false,
-                'error' => 'Unauthorized. Valid admin token required.',
-            ], 401);
-        }
-        
-        // Parse request body
-        $input = json_decode(file_get_contents('php://input'), true) ?? [];
-        
-        $dmmClient = new DmmClient(
-            DMM_API_ID,
-            DMM_AFFILIATE_ID,
-            DMM_API_ENDPOINT
-        );
-        
-        try {
-            $hits = isset($input['hits']) ? min((int)$input['hits'], 100) : 20;
-            $offset = isset($input['offset']) ? (int)$input['offset'] : 1;
-            
-            $response = $dmmClient->fetchLatest($hits, $offset);
-            
-            // Store items in database
-            $savedCount = 0;
-            foreach ($response['items'] as $apiItem) {
-                try {
-                    $itemRepository->upsertFromApi($apiItem);
-                    $savedCount++;
-                } catch (Exception $e) {
-                    logError("Failed to save item: " . $e->getMessage(), ['item' => $apiItem]);
-                }
-            }
-            
-            // Log fetch operation
-            $stmt = $pdo->prepare("
-                INSERT INTO fetch_logs (fetch_type, status, items_fetched, fetch_date)
-                VALUES (:fetch_type, :status, :items_fetched, NOW())
-            ");
-            $stmt->execute([
-                ':fetch_type' => 'manual',
-                ':status' => 'success',
-                ':items_fetched' => $savedCount,
-            ]);
-            
-            respondJson([
-                'success' => true,
-                'data' => [
-                    'total_fetched' => count($response['items']),
-                    'saved_count' => $savedCount,
-                    'api_total' => $response['total_count'],
-                ],
-            ]);
-        } catch (Exception $e) {
-            // Log fetch failure
-            $stmt = $pdo->prepare("
-                INSERT INTO fetch_logs (fetch_type, status, items_fetched, error_message, fetch_date)
-                VALUES (:fetch_type, :status, 0, :error_message, NOW())
-            ");
-            $stmt->execute([
-                ':fetch_type' => 'manual',
-                ':status' => 'failure',
-                ':error_message' => $e->getMessage(),
-            ]);
-            
-            respondJson([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-    
-    // No route matched - 404
-    respondJson([
-        'success' => false,
-        'error' => 'Endpoint not found',
-    ], 404);
-    
+
+    // No route matched
+    respondJson(['success' => false, 'error' => 'Endpoint not found', 'path' => $requestPath, 'method' => $requestMethod], 404);
+
 } catch (Exception $e) {
-    logError("Unhandled exception: " . $e->getMessage());
-    
-    respondJson([
-        'success' => false,
-        'error' => APP_DEBUG ? $e->getMessage() : 'Internal server error',
-    ], 500);
+    error_log('Application error: ' . $e->getMessage());
+    respondJson(['success' => false, 'error' => 'Internal server error'], 500);
 }

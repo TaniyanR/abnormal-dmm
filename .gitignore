@@ -25,5 +25,9 @@ tmp/
 temp/
 cache/
 
-# Docker volumes data
+# Docker volumes / DB data
 db_data/
+mariadb_data/
+
+# Other local-only files
+*.env.local
