@@ -15,8 +15,10 @@ require_once __DIR__ . '/../src/DmmClient.php';
 error_reporting(APP_DEBUG ? E_ALL : 0);
 ini_set('display_errors', APP_DEBUG ? '1' : '0');
 
-// Enable CORS for development
-header('Access-Control-Allow-Origin: *');
+// Enable CORS (configure for production environment)
+$allowedOrigin = APP_ENV === 'production' ? 
+    (env('CORS_ALLOWED_ORIGIN', 'https://yourdomain.com')) : '*';
+header("Access-Control-Allow-Origin: {$allowedOrigin}");
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Admin-Token');
 

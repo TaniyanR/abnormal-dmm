@@ -93,6 +93,7 @@ class DmmClient
                 'content_id' => $item['content_id'] ?? '',
                 'title' => $item['title'] ?? '',
                 'description' => $item['iteminfo']['genre'][0]['name'] ?? null,
+                // Prefer higher resolution video (560x360) over lower resolution (476x306)
                 'sample_video_url' => $item['sampleMovieURL']['size_560_360'] ?? 
                                      $item['sampleMovieURL']['size_476_306'] ?? null,
                 'price' => isset($item['prices']['price']) ? (int)str_replace(',', '', $item['prices']['price']) : null,
