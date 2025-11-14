@@ -62,8 +62,6 @@ class AdminImageDelete {
             wp_send_json_error(['message' => 'post_id が指定されていません。']);
         }
 
-        global $wpdb;
-
         $deleted = [];
         $errors = [];
 
