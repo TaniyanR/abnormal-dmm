@@ -1,0 +1,47 @@
+/* 固定 CSS: PC は右サイドに固定、モバイルは下部固定 */
+.mutual-rss-widget {
+  position: fixed;
+  right: 16px;
+  top: 120px;
+  width: 300px;
+  max-width: 90%;
+  z-index: 9999;
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  padding: 8px;
+  box-sizing: border-box;
+  font-family: "Hiragino Kaku Gothic ProN", "ヒラギノ角ゴ ProN", Meiryo, sans-serif;
+}
+.mutual-rss-item {
+  display: block;
+  color: #333;
+  text-decoration: none;
+  margin-bottom: 12px;
+}
+.mutual-rss-image-wrap {
+  width: 100%;
+  height: 170px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f8f8;
+}
+.mutual-rss-image {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.mutual-rss-noimage { height: 170px; }
+.mutual-rss-title { margin-top: 8px; font-size: 14px; font-weight: 700; color: #111; text-align: center; line-height: 1.3; }
+.mutual-rss-text { margin-top: 6px; font-size: 12px; color: #666; text-align: left; line-height: 1.4; padding: 0 6px 6px 6px; }
+@media (max-width: 768px) {
+  .mutual-rss-widget { right: 0; left: 0; bottom: 0; top: auto; width: 100%; max-width: 100%; border-radius: 0; padding: 8px; box-shadow: 0 -6px 12px rgba(0,0,0,0.08); }
+  .mutual-rss-image-wrap, .mutual-rss-noimage { height: 140px; }
+  .mutual-rss-title { font-size: 13px; }
+  .mutual-rss-text { display: none; }
+}
+.mutual-rss-item:hover .mutual-rss-title { color: #0073aa; }
