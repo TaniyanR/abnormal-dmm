@@ -29,9 +29,9 @@ class AdminImageDelete {
 
         // 表示ボタン（JS で Ajax 呼び出し）
         echo '<p>この投稿のプラグイン関連画像を削除します。</p>';
-        echo '<p><label><input type="checkbox" id="plugin_delete_physical" /> 添付ファイル自体も削除する（完全削除）</label></p>';
-        echo '<p><button type="button" class="button button-danger" id="plugin-delete-images-btn" data-postid="'.esc_attr($post->ID).'">画像を削除</button></p>';
-        echo '<div id="plugin-delete-images-result" style="margin-top:8px;" ></div>';
+        echo '<p></p>';
+        echo '<p></p>';
+        echo '';
     }
 
     public static function enqueue_admin_scripts($hook) {
