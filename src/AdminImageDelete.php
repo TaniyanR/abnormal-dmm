@@ -94,7 +94,7 @@ class AdminImageDelete {
                 $decoded = json_decode($val, true);
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                     // may be array of URLs or array of objects
-                    foreach ($decoded as $it) {
+n                    foreach ($decoded as $it) {
                         if (is_string($it)) $urls[] = $it;
                         elseif (is_array($it) && isset($it['url'])) $urls[] = $it['url'];
                     }
