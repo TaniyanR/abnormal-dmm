@@ -100,11 +100,25 @@
             videos.forEach(video => {
                 const card = document.createElement('div');
                 card.className = 'video-card';
-                card.innerHTML = `
-                    ${video.imageURL ? `<img src="${video.imageURL}" alt="${video.title}">` : ''}
-                    <div class="video-title">${video.title || 'Untitled'}</div>
-                    <div class="video-date">${video.date || ''}</div>
-                `;
+                
+                // Create elements to prevent XSS
+                if (video.imageURL) {
+                    const img = document.createElement('img');
+                    img.src = video.imageURL;
+                    img.alt = video.title || 'Video thumbnail';
+                    card.appendChild(img);
+                }
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'video-title';
+                titleDiv.textContent = video.title || 'Untitled';
+                card.appendChild(titleDiv);
+                
+                const dateDiv = document.createElement('div');
+                dateDiv.className = 'video-date';
+                dateDiv.textContent = video.date || '';
+                card.appendChild(dateDiv);
+                
                 grid.appendChild(card);
             });
         }

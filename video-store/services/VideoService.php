@@ -102,10 +102,6 @@ class VideoService
      */
     private function enrichVideoData($video)
     {
-        // Add computed fields or format data as needed
-        $video['image_url'] = $video['imageURL'] ?? null;
-        $video['affiliate_url'] = $video['affiliateURL'] ?? null;
-        
         // Format dates if needed
         if (isset($video['date'])) {
             $video['formatted_date'] = date('Y-m-d', strtotime($video['date']));

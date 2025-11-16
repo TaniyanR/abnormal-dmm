@@ -67,7 +67,7 @@ class VideoModel
      */
     public function all($limit = 20, $offset = 0)
     {
-        $stmt = $this->pdo->prepare("SELECT * FROM {$this->table} ORDER BY created_at DESC LIMIT ? OFFSET ?");
+        $stmt = $this->pdo->prepare("SELECT * FROM {$this->table} ORDER BY release_date DESC, created_at DESC LIMIT ? OFFSET ?");
         $stmt->execute([$limit, $offset]);
         
         return $stmt->fetchAll();
@@ -86,8 +86,9 @@ class VideoModel
         
         // Add filter conditions if needed
         if (!empty($filters['keyword'])) {
-            $sql .= " WHERE title LIKE ?";
-            $params[] = '%' . $filters['keyword'] . '%';
+            $keyword = '%' . $filters['keyword'] . '%';
+            $sql .= " WHERE (title LIKE ? OR description LIKE ? OR content_id LIKE ?)";
+            $params = [$keyword, $keyword, $keyword];
         }
         
         $stmt = $this->pdo->prepare($sql);
