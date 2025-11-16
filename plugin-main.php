@@ -19,6 +19,7 @@ if (!defined('VIDEOSTORE_PLUGIN_URL')) {
 }
 
 require_once VIDEOSTORE_PLUGIN_DIR . 'src/AdminImageDelete.php';
+require_once VIDEOSTORE_PLUGIN_DIR . 'src/ImageDeleteLogger.php';
 require_once VIDEOSTORE_PLUGIN_DIR . 'src/MutualRss.php';
 
 add_action('plugins_loaded', function() {
@@ -27,5 +28,11 @@ add_action('plugins_loaded', function() {
     }
     if (class_exists('MutualRss')) {
         MutualRss::init();
+    }
+});
+
+register_activation_hook(__FILE__, function() {
+    if (class_exists('ImageDeleteLogger')) {
+        ImageDeleteLogger::install_table();
     }
 });

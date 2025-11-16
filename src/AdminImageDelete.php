@@ -154,6 +154,14 @@ class AdminImageDelete {
             }
         }
 
+        if (class_exists('ImageDeleteLogger')) {
+            try {
+                ImageDeleteLogger::log($post_id, get_current_user_id(), $deleted, $delete_physical);
+            } catch (Throwable $e) {
+                $errors[] = 'ログ記録に失敗しました: ' . $e->getMessage();
+            }
+        }
+
         // 結果を返す
         $msg = implode("\n", $deleted);
         if (!empty($errors)) {
