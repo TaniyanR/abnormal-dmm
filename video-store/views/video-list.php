@@ -81,6 +81,8 @@
 
         async function loadVideos(offset = 0) {
             try {
+                // Note: Using /api/items endpoint which is the existing API
+                // This scaffolding integrates with the existing application
                 const response = await fetch(`/api/items?limit=${itemsPerPage}&offset=${offset}`);
                 const data = await response.json();
                 

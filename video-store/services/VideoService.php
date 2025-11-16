@@ -103,8 +103,8 @@ class VideoService
      */
     private function enrichVideoData($video)
     {
-        // Format dates if needed
-        if (isset($video['date'])) {
+        // Format dates if needed (with null safety)
+        if (!empty($video['date'])) {
             $video['formatted_date'] = date('Y-m-d', strtotime($video['date']));
         }
         
