@@ -178,7 +178,7 @@ code{background:#f8f9fa;padding:2px 6px;border-radius:3px;font-family:monospace;
 
   <h2>Manual Fetch Output</h2>
   <div id="fetchResult" class="status-box">Not run yet.</div>
-  <div class="note">Manual fetch calls <code>/public/api/admin/fetch.php</code> via fetch and shows JSON response.</div>
+  <div class="note">Manual fetch calls <code>/api/admin/fetch</code> via fetch and shows JSON response.</div>
 </div>
 
 <script src="/public/assets/js/admin.js"></script>
