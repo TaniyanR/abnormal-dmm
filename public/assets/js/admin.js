@@ -28,7 +28,7 @@
   }
 
   function runManualFetch(resultEl, tokenInput) {
-    const endpoint = (window.__ADMIN_UI && window.__ADMIN_UI.fetchEndpoint) || '/public/api/admin/fetch.php';
+    const endpoint = (window.__ADMIN_UI && window.__ADMIN_UI.fetchEndpoint) || '/api/admin/fetch';
     const token = tokenInput.value.trim() || (window.__ADMIN_UI && window.__ADMIN_UI.defaultToken) || '';
 
     if (!token) {

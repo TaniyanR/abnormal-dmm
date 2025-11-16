@@ -3,17 +3,14 @@ declare(strict_types=1);
 
 // admin/api_settings.php
 // Admin UI to view/update DMM API fetch settings and trigger manual fetch.
-// Requires: src/bootstrap.php, src/DB.php, .env.php (ADMIN_TOKEN)
+// Requires: src/bootstrap.php
 
-require_once __DIR__ . '/../src/bootstrap.php';
-require_once __DIR__ . '/../src/DB.php';
-
-$config = require __DIR__ . '/../.env.php';
-DB::init($config);
-$pdo = DB::get();
+$container = require __DIR__ . '/../src/bootstrap.php';
+$config = $container['config'];
+$pdo = $container['pdo'];
 
 // Simple auth: Authorization: Bearer <token>
-$adminToken = $config['ADMIN_TOKEN'] ?? '';
+$adminToken = $config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: '';
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
 if (!$adminToken || !preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) || !hash_equals($adminToken, $m[1])) {
     http_response_code(401);
@@ -172,7 +169,7 @@ hr { margin: 30px 0; border: none; border-top: 1px solid #ddd; }
 
   <h2>Manual Fetch Output</h2>
   <div id="fetchResult" class="status-box">Not run yet.</div>
-  <div class="note">Manual fetch calls <code>/public/api/admin/fetch.php</code> via fetch and shows JSON response.</div>
+  <div class="note">Manual fetch calls <code>/api/admin/fetch</code> via fetch and shows JSON response.</div>
 </div>
 
 <script src="/public/assets/js/admin.js"></script>
@@ -180,7 +177,7 @@ hr { margin: 30px 0; border: none; border-top: 1px solid #ddd; }
 (function(){
   // expose needed values to admin.js
   window.__ADMIN_UI = {
-    fetchEndpoint: '/public/api/admin/fetch.php',
+    fetchEndpoint: '/api/admin/fetch',
     defaultToken: '' // Token should be entered manually for security
   };
 })();
