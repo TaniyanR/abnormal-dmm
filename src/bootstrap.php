@@ -115,12 +115,28 @@ try {
     exit;
 }
 
+// Load required classes
+require_once __DIR__ . '/ItemRepository.php';
+require_once __DIR__ . '/DmmClient.php';
+
+// Instantiate repository and API client
+$itemRepo = new ItemRepository($pdo);
+$dmmClient = new DmmClient(
+    $config['dmm']['api_id'],
+    $config['dmm']['affiliate_id'],
+    $config['dmm']['endpoint']
+);
+
 // Export globals for simple require usage
 $GLOBALS['pdo'] = $pdo;
 $GLOBALS['config'] = $config;
+$GLOBALS['itemRepo'] = $itemRepo;
+$GLOBALS['dmmClient'] = $dmmClient;
 
 // Also return for require-as-expression usage
 return [
+    'config' => $config,
     'pdo' => $pdo,
-    'config' => $config
+    'itemRepo' => $itemRepo,
+    'dmmClient' => $dmmClient
 ];

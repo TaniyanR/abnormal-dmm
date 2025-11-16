@@ -102,3 +102,76 @@ function logError(string $message, array $context = []): void
 
     error_log($logMessage);
 }
+
+/**
+ * Parse JSON request body and return as array.
+ * Returns empty array on invalid JSON.
+ *
+ * @return array Parsed JSON body or empty array
+ */
+function json_body(): array
+{
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+/**
+ * Send JSON response (snake_case alias for respondJson).
+ *
+ * @param mixed $data Data to encode as JSON
+ * @param int $statusCode HTTP status code (default: 200)
+ * @param array $headers Additional headers to send (key => value)
+ * @return void
+ */
+function respond_json($data, $statusCode = 200, array $headers = [])
+{
+    respondJson($data, $statusCode, $headers);
+}
+
+/**
+ * Check admin authorization via Bearer token.
+ * Returns true if valid, terminates with 401 if invalid.
+ *
+ * @param array $config Configuration array with admin token
+ * @return bool True if authorized (never returns false - terminates instead)
+ */
+function check_admin_auth(array $config): bool
+{
+    $token = '';
+    
+    // Check X-Admin-Token header
+    if (!empty($_SERVER['HTTP_X_ADMIN_TOKEN'])) {
+        $token = trim($_SERVER['HTTP_X_ADMIN_TOKEN']);
+    }
+    // Check Authorization: Bearer <token>
+    elseif (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+        if (preg_match('/Bearer\s+(.+)$/i', $_SERVER['HTTP_AUTHORIZATION'], $m)) {
+            $token = trim($m[1]);
+        }
+    }
+    
+    $expected = $config['admin']['token'] ?? env('ADMIN_TOKEN', '');
+    
+    if (empty($expected) || empty($token) || !hash_equals($expected, $token)) {
+        respond_json(['success' => false, 'error' => 'Unauthorized'], 401);
+    }
+    
+    return true;
+}
+
+/**
+ * Parse request path into segments.
+ *
+ * @param string|null $path Optional path to parse (defaults to current REQUEST_URI)
+ * @return array Array of path segments
+ */
+function path_segments(?string $path = null): array
+{
+    if ($path === null) {
+        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    }
+    
+    $segments = explode('/', trim($path, '/'));
+    return array_filter($segments, function($s) { return $s !== ''; });
+}
