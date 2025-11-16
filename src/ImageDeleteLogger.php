@@ -23,7 +23,7 @@ class ImageDeleteLogger {
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+        $sql = "CREATE TABLE {$table_name} (
             id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             post_id BIGINT(20) UNSIGNED NOT NULL,
             user_id BIGINT(20) UNSIGNED NOT NULL,
@@ -43,7 +43,8 @@ class ImageDeleteLogger {
         $table = self::get_table_name();
         $deleted_json = wp_json_encode(array_values($deleted_items));
         if ($deleted_json === false) {
-            $deleted_json = json_encode(array_values($deleted_items));
+            error_log('ImageDeleteLogger: Failed to encode deleted_items to JSON');
+            $deleted_json = '[]';
         }
 
         $result = $wpdb->insert(
@@ -63,9 +64,10 @@ class ImageDeleteLogger {
 
     public static function get_recent($limit = 50) {
         global $wpdb;
-        $table = self::get_table_name();
+        $table = esc_sql(self::get_table_name());
         $limit = intval($limit);
-        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table} ORDER BY id DESC LIMIT %d", $limit), ARRAY_A);
+        $sql = $wpdb->prepare("SELECT * FROM `{$table}` ORDER BY id DESC LIMIT %d", $limit);
+        $rows = $wpdb->get_results($sql, ARRAY_A);
         if (!$rows) return [];
         return $rows;
     }
