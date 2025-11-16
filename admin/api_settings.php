@@ -5,7 +5,6 @@ declare(strict_types=1);
 // Admin UI to view/update DMM API fetch settings and trigger manual fetch.
 // Requires: src/bootstrap.php, src/DB.php, .env.php (ADMIN_TOKEN)
 
-require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/../src/helpers.php';
 
 $config = require __DIR__ . '/../src/bootstrap.php';
@@ -280,7 +279,7 @@ code {
     <div class="actions">
       <button type="submit" class="btn">Save Settings</button>
       <button type="button" id="runFetchBtn" class="btn secondary">Run manual fetch</button>
-      <input type="text" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="small" value="">
+      <input type="text" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="small" value="" autocomplete="off">
     </div>
   </form>
 
@@ -297,7 +296,7 @@ code {
   // expose needed values to admin.js
   window.__ADMIN_UI = {
     fetchEndpoint: '/public/api/admin/fetch.php',
-    defaultToken: '<?php echo h($adminToken ?? ''); ?>'
+    defaultToken: ''
   };
 })();
 </script>
