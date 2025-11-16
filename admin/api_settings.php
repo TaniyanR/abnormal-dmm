@@ -15,7 +15,7 @@ $pdo = DB::get();
 // Simple auth: Authorization: Bearer <token>
 $adminToken = $config['ADMIN_TOKEN'] ?? '';
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-if (!$adminToken || !preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) || $m[1] !== $adminToken) {
+if (!$adminToken || !preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) || !hash_equals($adminToken, $m[1])) {
     http_response_code(401);
     die('Unauthorized');
 }
@@ -181,7 +181,7 @@ hr { margin: 30px 0; border: none; border-top: 1px solid #ddd; }
   // expose needed values to admin.js
   window.__ADMIN_UI = {
     fetchEndpoint: '/public/api/admin/fetch.php',
-    defaultToken: '<?php echo h($adminToken ?? ''); ?>'
+    defaultToken: '' // Token should be entered manually for security
   };
 })();
 </script>
