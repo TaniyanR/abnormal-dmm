@@ -14,12 +14,12 @@ jQuery(function($){
             delete_physical: deletePhysical
         }).done(function(resp){
             if (resp.success) {
-                result.html('<div style="color:green;white-space:pre-wrap;">' + resp.data.message + '</div>');
+                result.html('');
             } else {
-                result.html('<div style="color:red;white-space:pre-wrap;">' + (resp.data && resp.data.message ? resp.data.message : 'エラー') + '</div>');
+                result.html('');
             }
         }).fail(function(){
-            result.html('<div style="color:red;">通信エラー</div>');
+            result.html('');
         }).always(function(){
             btn.prop('disabled', false).text('画像を削除');
         });
