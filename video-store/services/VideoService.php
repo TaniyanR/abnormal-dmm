@@ -77,13 +77,14 @@ class VideoService
     {
         $limit = $options['limit'] ?? $this->config['items_per_page'];
         $offset = $options['offset'] ?? 0;
+        $filters = $options['filters'] ?? [];
         
         // Validate and sanitize limit
         $limit = min($limit, $this->config['max_items_per_page']);
         $limit = max(1, $limit);
         
-        $videos = $this->videoModel->all($limit, $offset);
-        $total = $this->videoModel->count($options['filters'] ?? []);
+        $videos = $this->videoModel->all($limit, $offset, $filters);
+        $total = $this->videoModel->count($filters);
         
         return [
             'items' => array_map([$this, 'enrichVideoData'], $videos),

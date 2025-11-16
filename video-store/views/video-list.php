@@ -139,8 +139,11 @@
         }
 
         function loadNextPage() {
-            currentPage++;
-            loadVideos(currentPage * itemsPerPage);
+            const nextBtn = document.getElementById('nextBtn');
+            if (!nextBtn.disabled) {
+                currentPage++;
+                loadVideos(currentPage * itemsPerPage);
+            }
         }
 
         // Load initial videos

@@ -59,16 +59,31 @@ class VideoModel
     }
 
     /**
-     * Get all videos with pagination
+     * Get all videos with pagination and filters
      * 
      * @param int $limit Number of items per page
      * @param int $offset Offset for pagination
+     * @param array $filters Optional filters
      * @return array List of videos
      */
-    public function all($limit = 20, $offset = 0)
+    public function all($limit = 20, $offset = 0, $filters = [])
     {
-        $stmt = $this->pdo->prepare("SELECT * FROM {$this->table} ORDER BY release_date DESC, created_at DESC LIMIT ? OFFSET ?");
-        $stmt->execute([$limit, $offset]);
+        $sql = "SELECT * FROM {$this->table}";
+        $params = [];
+        
+        // Add filter conditions if needed
+        if (!empty($filters['keyword'])) {
+            $keyword = '%' . $filters['keyword'] . '%';
+            $sql .= " WHERE (title LIKE ? OR description LIKE ? OR content_id LIKE ?)";
+            $params = [$keyword, $keyword, $keyword];
+        }
+        
+        $sql .= " ORDER BY release_date DESC, created_at DESC LIMIT ? OFFSET ?";
+        $params[] = $limit;
+        $params[] = $offset;
+        
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
         
         return $stmt->fetchAll();
     }
