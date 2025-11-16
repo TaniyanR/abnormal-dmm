@@ -24,19 +24,46 @@ class AdminImageDelete {
     }
 
     public static function render_meta_box($post) {
-        // nonce フィールド
+        // nonce フィールド（HTMLにも post_id を埋める）
         wp_nonce_field('plugin_image_delete_action', 'plugin_image_delete_nonce');
 
-        // 表示ボタン（JS で Ajax 呼び出し）
-        echo '<p>この投稿のプラグイン関連画像を削除します。</p>';
-        echo '<p></p>';
-        echo '<p></p>';
-        echo '';
+        $post_id = (int) $post->ID;
+
+        // 管理画面用の UI を出力（JS がボタンをハンドル）
+        echo '<p>この投稿のプラグイン関連画像を削除します。物理ファイルも削除する場合は下のチェックを入れてください。</p>';
+
+        // 削除物理ファイルのオプション
+        echo '<p>';
+        echo '<label>';
+        echo '<input type="checkbox" id="plugin-delete-physical" name="plugin-delete-physical" value="1" /> ';
+        echo esc_html('画像ファイルもサーバから削除する（true = 実ファイル削除）');
+        echo '</label>';
+        echo '</p>';
+
+        // ボタン類
+        echo '<p>';
+        echo '<button type="button" class="button button-secondary" id="plugin-delete-images-btn" data-post-id="' . esc_attr($post_id) . '">' . esc_html('画像を削除') . '</button> ';
+        echo '<span id="plugin-delete-images-spinner" style="display:none;margin-left:8px;">' . esc_html('処理中...') . '</span>';
+        echo '</p>';
+
+        // 結果表示領域
+        echo '<div id="plugin-delete-images-result" style="margin-top:8px; white-space:pre-wrap;"></div>';
     }
 
     public static function enqueue_admin_scripts($hook) {
-        // 管理画面のみ読み込む
-        wp_enqueue_script('plugin-admin-image-delete', plugin_dir_url(__FILE__) . '../assets/js/admin-image-delete.js', ['jquery'], '1.0', true);
+        // 投稿編集画面以外では読み込まない
+        if (!in_array($hook, ['post.php', 'post-new.php'], true)) {
+            return;
+        }
+
+        // 管理画面スクリプトを読み込む（assets/js/admin-image-delete.js を想定）
+        wp_enqueue_script(
+            'plugin-admin-image-delete',
+            plugin_dir_url(__FILE__) . '../assets/js/admin-image-delete.js',
+            ['jquery'],
+            '1.0',
+            true
+        );
         wp_localize_script('plugin-admin-image-delete', 'PluginImageDelete', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('plugin_image_delete_action'),
