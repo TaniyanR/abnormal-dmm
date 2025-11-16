@@ -14,7 +14,7 @@ PHP（DmmClient）例:
 ```php
 // DmmClient::getItemByContentId は既に用意済みの想定。
 // もしItemListで詳細が取れない場合、ActressSearch等の別APIを呼ぶ例。
-$item = $dmm-&gt;getItemByContentId('ABC-123');
+$item = $dmm->getItemByContentId('ABC-123');
 // $item が null のときのみスクレイピングを検討する（最小化）
 ```
 
@@ -64,13 +64,13 @@ $item = $dmm-&gt;getItemByContentId('ABC-123');
 function safeFetchHtml(string $url, int $timeout = 30): ?string {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER =&gt; true,
-        CURLOPT_FOLLOWLOCATION =&gt; true,
-        CURLOPT_MAXREDIRS =&gt; 5,
-        CURLOPT_TIMEOUT =&gt; $timeout,
-        CURLOPT_USERAGENT =&gt; 'VideoStoreBot/1.0 (+https://yourdomain.example/)',
-        CURLOPT_SSL_VERIFYPEER =&gt; true,
-        CURLOPT_SSL_VERIFYHOST =&gt; 2,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_USERAGENT => 'VideoStoreBot/1.0 (+https://yourdomain.example/)',
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
     ]);
     $html = curl_exec($ch);
     $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -78,7 +78,7 @@ function safeFetchHtml(string $url, int $timeout = 30): ?string {
     curl_close($ch);
 
     if ($http !== 200) return null;
-    if ($ct &amp;&amp; !preg_match('#text/html|application/xhtml\+xml#i', $ct)) return null;
+    if ($ct && !preg_match('#text/html|application/xhtml\+xml#i', $ct)) return null;
     return $html;
 }
 
@@ -87,7 +87,7 @@ function parseDescriptionFromHtml(string $html, string $floor = null, string $se
     libxml_use_internal_errors(true);
 
     $dom = new DOMDocument();
-    @$dom-&gt;loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+    @ $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
 
     $xpath = new DOMXPath($dom);
 
@@ -100,12 +100,12 @@ function parseDescriptionFromHtml(string $html, string $floor = null, string $se
 
     $desc = '';
     foreach ($candidates as $expr) {
-        $nodes = $xpath-&gt;query($expr);
-        if ($nodes &amp;&amp; $nodes-&gt;length) {
-            if ($nodes-&gt;item(0)-&gt;nodeType === XML_ATTRIBUTE_NODE) {
-                $desc = trim($nodes-&gt;item(0)-&gt;nodeValue);
+        $nodes = $xpath->query($expr);
+        if ($nodes && $nodes->length) {
+            if ($nodes->item(0)->nodeType === XML_ATTRIBUTE_NODE) {
+                $desc = trim($nodes->item(0)->nodeValue);
             } else {
-                $desc = trim($nodes-&gt;item(0)-&gt;textContent);
+                $desc = trim($nodes->item(0)->textContent);
             }
             if ($desc) break;
         }
