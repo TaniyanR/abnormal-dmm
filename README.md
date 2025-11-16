@@ -104,9 +104,17 @@ abnormal-dmm/
 │   ├── helpers.php
 │   ├── ItemRepository.php
 │   └── DmmClient.php
-└── public/
-    └── index.php
+├── public/
+│   └── index.php
+└── video-store/           # Modular video store feature (MVC structure)
+    ├── models/            # Data models
+    ├── services/          # Business logic
+    ├── controllers/       # API controllers
+    ├── views/             # Frontend templates
+    └── VideoStoreConfig.php
 ```
+
+For more information about the video store module structure and usage, see [video-store/README.md](video-store/README.md).
 
 ## Database Schema
 
