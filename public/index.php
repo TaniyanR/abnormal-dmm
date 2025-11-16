@@ -8,13 +8,13 @@
  *   POST /api/admin/fetch         - fetch items from DMM API (requires X-Admin-Token header)
  */
 
-$bootstrap = require __DIR__ . '/../src/bootstrap.php';
-$pdo = $bootstrap['pdo'];
-$config = $bootstrap['config'];
+$container = require __DIR__ . '/../src/bootstrap.php';
+$pdo = $container['pdo'];
+$config = $container['config'];
+$itemRepo = $container['itemRepo'];
+$dmmClient = $container['dmmClient'];
 
 require_once __DIR__ . '/../src/helpers.php';
-require_once __DIR__ . '/../src/ItemRepository.php';
-require_once __DIR__ . '/../src/DmmClient.php';
 
 // Error reporting (enable more in development)
 $appEnv = getenv('APP_ENV') ?: 'development';
@@ -62,9 +62,8 @@ try {
         $filters['limit'] = max(1, min($filters['limit'], 100));
         $filters['offset'] = max(0, $filters['offset']);
 
-        $repo = new ItemRepository($pdo);
-        $items = $repo->search($filters);
-        $total = $repo->count($filters);
+        $items = $itemRepo->search($filters);
+        $total = $itemRepo->count($filters);
 
         respondJson([
             'success' => true,
@@ -80,8 +79,7 @@ try {
     // GET /api/items/{content_id}
     if ($requestMethod === 'GET' && preg_match('#^/api/items/([^/]+)/?$#', $requestPath, $m)) {
         $contentId = $m[1];
-        $repo = new ItemRepository($pdo);
-        $item = $repo->findByContentId($contentId);
+        $item = $itemRepo->findByContentId($contentId);
         if ($item) {
             respondJson(['success' => true, 'data' => $item]);
         } else {
@@ -114,17 +112,9 @@ try {
         $hits = max(1, min($hits, 100));
         $offset = max(1, $offset);
 
-        // Initialize DMM client
-        $dmm = new DmmClient(
-            $config['dmm']['api_id'] ?? null,
-            $config['dmm']['affiliate_id'] ?? null,
-            $config['dmm']['endpoint'] ?? null
-        );
-
-        $repo = new ItemRepository($pdo);
         $start = microtime(true);
 
-        $apiResp = $dmm->fetchItems(['hits' => $hits, 'offset' => $offset]);
+        $apiResp = $dmmClient->fetchItems(['hits' => $hits, 'offset' => $offset]);
 
         if ($apiResp === false || !is_array($apiResp)) {
             // log failure
@@ -150,7 +140,7 @@ try {
         $processed = 0;
         foreach ($itemsList as $apiItem) {
             try {
-                $repo->upsertFromApi($apiItem);
+                $itemRepo->upsertFromApi($apiItem);
                 $processed++;
             } catch (Exception $e) {
                 error_log('Item upsert failed: ' . $e->getMessage());
