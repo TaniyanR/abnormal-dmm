@@ -64,8 +64,9 @@ class ImageDeleteLogger {
 
     public static function get_recent($limit = 50) {
         global $wpdb;
-        $table = esc_sql(self::get_table_name());
+        $table = self::get_table_name();
         $limit = intval($limit);
+        // Note: Table name cannot be parameterized in prepare(). It's safe here as it comes from wpdb->prefix + our constant.
         $sql = $wpdb->prepare("SELECT * FROM `{$table}` ORDER BY id DESC LIMIT %d", $limit);
         $rows = $wpdb->get_results($sql, ARRAY_A);
         if (!$rows) return [];
