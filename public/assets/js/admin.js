@@ -23,11 +23,11 @@
     }
 
     runFetchBtn.addEventListener('click', function() {
-      runManualFetch(fetchResult, manualTokenInput);
+      runManualFetch(runFetchBtn, fetchResult, manualTokenInput);
     });
   }
 
-  function runManualFetch(resultEl, tokenInput) {
+  function runManualFetch(btn, resultEl, tokenInput) {
     const endpoint = (window.__ADMIN_UI && window.__ADMIN_UI.fetchEndpoint) || '/api/admin/fetch';
     const token = tokenInput.value.trim() || (window.__ADMIN_UI && window.__ADMIN_UI.defaultToken) || '';
 
@@ -40,7 +40,6 @@
     resultEl.textContent = 'Running fetch request...';
     resultEl.style.color = '#333';
 
-    const btn = document.getElementById('runFetchBtn');
     if (btn) btn.disabled = true;
 
     fetch(endpoint, {

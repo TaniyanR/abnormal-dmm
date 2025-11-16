@@ -10,9 +10,9 @@ $config = $container['config'];
 $pdo = $container['pdo'];
 
 // Simple auth: Authorization: Bearer <token>
-$adminToken = $config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: '';
+$adminToken = $config['admin']['token'] ?? '';
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-if (!$adminToken || !preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) || !hash_equals($adminToken, $m[1])) {
+if (empty($adminToken) || !preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) || !hash_equals($adminToken, $m[1])) {
     http_response_code(401);
     die('Unauthorized');
 }
@@ -172,7 +172,7 @@ hr { margin: 30px 0; border: none; border-top: 1px solid #ddd; }
   <div class="note">Manual fetch calls <code>/api/admin/fetch</code> via fetch and shows JSON response.</div>
 </div>
 
-<script src="/public/assets/js/admin.js"></script>
+<script src="../assets/js/admin.js"></script>
 <script>
 (function(){
   // expose needed values to admin.js
