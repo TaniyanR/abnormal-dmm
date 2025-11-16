@@ -173,5 +173,5 @@ function path_segments(?string $path = null): array
     }
     
     $segments = explode('/', trim($path, '/'));
-    return array_filter($segments, fn($s) => $s !== '');
+    return array_filter($segments, function($s) { return $s !== ''; });
 }
