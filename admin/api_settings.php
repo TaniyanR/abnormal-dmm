@@ -279,7 +279,7 @@ code {
     <div class="actions">
       <button type="submit" class="btn">Save Settings</button>
       <button type="button" id="runFetchBtn" class="btn secondary">Run manual fetch</button>
-      <input type="text" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="small" value="" autocomplete="off">
+      <input type="password" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="small" value="" autocomplete="off">
     </div>
   </form>
 

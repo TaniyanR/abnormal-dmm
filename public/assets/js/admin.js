@@ -45,7 +45,12 @@
           }
         });
 
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          throw new Error(`Invalid JSON response: ${jsonError.message}`);
+        }
         
         // Format JSON for display
         const formatted = JSON.stringify(data, null, 2);
