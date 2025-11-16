@@ -306,7 +306,7 @@ code {
   <div class="note">Manual fetch calls <code>/api/admin/fetch</code> via fetch API and shows JSON response.</div>
 </div>
 
-<script src="/public/assets/js/admin.js"></script>
+<script src="/assets/js/admin.js"></script>
 <script>
 (function(){
   // Expose needed values to admin.js
