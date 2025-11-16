@@ -72,7 +72,7 @@ php -S localhost:8000 -t public
 # 手動テスト例
 curl http://localhost:8000/api/items
 curl -X POST http://localhost:8000/api/admin/fetch \
-  -H "Authorization: Bearer your_token" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN_HERE" \
   -H "Content-Type: application/json" \
   -d '{"hits": 10, "offset": 1}'
 ```
