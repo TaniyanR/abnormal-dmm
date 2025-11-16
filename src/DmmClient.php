@@ -3,16 +3,8 @@
  * src/DmmClient.php
  * Simple DMM / FANZA API client for ItemList (v3)
  *
- * The client accepts optional constructor parameters (apiId, affiliateId, endpoint).
- * If not provided, values are read from environment variables:
- *  - DMM_API_ID
- *  - DMM_AFFILIATE_ID
- *  - DMM_API_ENDPOINT (optional, defaults to ItemList endpoint)
- *
- * Methods:
- *  - fetchItems(array $params): array|false  (returns decoded response array on success, false on failure)
- *  - getRecentItems(int $hits, int $offset): array|false
- *  - getItemByContentId(string $contentId): array|null
+ * Improved: use cURL with retries, HTTP status checking, better error logs,
+ * and more defensive normalization.
  */
 
 class DmmClient
@@ -20,6 +12,7 @@ class DmmClient
     private $apiId;
     private $affiliateId;
     private $endpoint;
+    private $userAgent = 'VideoStore/1.0';
 
     public function __construct(string $apiId = null, string $affiliateId = null, string $endpoint = null)
     {
@@ -59,17 +52,9 @@ class DmmClient
 
         $url = $this->endpoint . '?' . http_build_query($query);
 
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'timeout' => 30,
-                'header' => "User-Agent: VideoStore/1.0\r\nAccept: application/json\r\n"
-            ]
-        ]);
-
-        $raw = @file_get_contents($url, false, $context);
+        $raw = $this->httpGet($url);
         if ($raw === false) {
-            error_log("DmmClient: HTTP request failed for URL: {$url}");
+            // error already logged in httpGet
             return false;
         }
 
@@ -81,11 +66,79 @@ class DmmClient
 
         // Basic validation: ensure result exists
         if (!isset($data['result'])) {
-            error_log('DmmClient: Unexpected API response (missing result).');
+            error_log('DmmClient: Unexpected API response (missing result). Raw response: ' . substr($raw, 0, 500));
             return false;
         }
 
         return $data;
+    }
+
+    /**
+     * HTTP GET helper using cURL with retries
+     *
+     * @param string $url
+     * @param int $retries
+     * @return string|false Raw response body or false on failure
+     */
+    private function httpGet(string $url, int $retries = 3)
+    {
+        $attempt = 0;
+        $lastErr = null;
+
+        while ($attempt < $retries) {
+            $attempt++;
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_USERAGENT => $this->userAgent,
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                ],
+            ]);
+
+            $body = curl_exec($ch);
+            $errno = curl_errno($ch);
+            $error = curl_error($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?: '';
+
+            curl_close($ch);
+
+            if ($errno) {
+                $lastErr = "cURL error ({$errno}): {$error}";
+                error_log("DmmClient: attempt {
+                    $attempt} failed: {
+                    $lastErr}");
+                // small backoff
+                usleep(200000 * $attempt);
+                continue;
+            }
+
+            if ($httpCode < 200 || $httpCode >= 300) {
+                $lastErr = "HTTP status {
+                    $httpCode}";
+                error_log("DmmClient: attempt {$attempt} returned non-2xx status: {$httpCode} for URL: {$url}");
+                usleep(200000 * $attempt);
+                continue;
+            }
+
+            // Prefer JSON content-type check but don't strictly require it (some APIs may omit)
+            if (stripos($contentType, 'application/json') === false && strlen($body) > 0 && $body[0] !== '{' && $body[0] !== '[') {
+                error_log("DmmClient: attempt {$attempt} unexpected content-type: {$contentType} for URL: {$url}");
+                // still allow attempt to decode, but log as warning
+            }
+
+            // success
+            return $body;
+        }
+
+        error_log('DmmClient: all attempts failed. Last error: ' . ($lastErr ?? 'unknown'));
+        return false;
     }
 
     /**
@@ -137,23 +190,77 @@ class DmmClient
         $normalizedItems = [];
 
         foreach ($items as $item) {
+            $contentId = $item['content_id'] ?? ($item['cid'] ?? '');
+            $title = $item['title'] ?? ($item['title_short'] ?? '');
+            $description = $item['iteminfo']['product_description'] ?? $item['description'] ?? ($item['item_description'] ?? '');
+            // sample video URL: choose best available
+            $sampleVideoUrl = null;
+            if (!empty($item['sampleMovieURL']) && is_array($item['sampleMovieURL'])) {
+                // prefer larger sizes when available
+                $sampleVideoUrl = $item['sampleMovieURL']['size_560_360'] ?? $item['sampleMovieURL']['size_476_306'] ?? null;
+            } elseif (!empty($item['sampleMovieURL'])) {
+                $sampleVideoUrl = (string)$item['sampleMovieURL'];
+            }
+
+            // price extraction (defensive)
+            $price = null;
+            if (!empty($item['prices']['price'])) {
+                $priceStr = (string)$item['prices']['price'];
+                $price = (int)preg_replace('/[^0-9]/', '', $priceStr);
+            } elseif (!empty($item['price'])) {
+                $price = (int)$item['price'];
+            }
+
+            $releaseDate = null;
+            if (!empty($item['date'])) {
+                $releaseDate = date('Y-m-d', strtotime($item['date']));
+            } elseif (!empty($item['release_date'])) {
+                $releaseDate = date('Y-m-d', strtotime($item['release_date']));
+            }
+
+            $thumbnail = null;
+            if (!empty($item['imageURL']) && is_array($item['imageURL'])) {
+                $thumbnail = $item['imageURL']['large'] ?? $item['imageURL']['small'] ?? null;
+            } elseif (!empty($item['images'])) {
+                $thumbnail = is_array($item['images']) ? ($item['images']['large'] ?? $item['images']['small'] ?? null) : null;
+            }
+
+            $genres = [];
+            if (!empty($item['iteminfo']['genre'])) {
+                $genres = is_array($item['iteminfo']['genre']) ? $item['iteminfo']['genre'] : [$item['iteminfo']['genre']];
+            }
+
+            $actresses = [];
+            if (!empty($item['iteminfo']['actress'])) {
+                $actresses = is_array($item['iteminfo']['actress']) ? $item['iteminfo']['actress'] : [$item['iteminfo']['actress']];
+            }
+
+            $maker = null;
+            if (!empty($item['iteminfo']['maker'])) {
+                if (is_array($item['iteminfo']['maker'])) {
+                    $maker = $item['iteminfo']['maker'][0] ?? null;
+                } else {
+                    $maker = $item['iteminfo']['maker'];
+                }
+            }
+
             $normalizedItems[] = [
-                'content_id' => $item['content_id'] ?? ($item['cid'] ?? ''),
-                'title' => $item['title'] ?? '',
-                'description' => $item['iteminfo']['product_description'] ?? ($item['description'] ?? null),
-                'sample_video_url' => $item['sampleMovieURL']['size_560_360'] ?? ($item['sampleMovieURL']['size_476_306'] ?? null),
-                'price' => isset($item['prices']['price']) ? (int)preg_replace('/[^0-9]/', '', (string)$item['prices']['price']) : null,
-                'release_date' => isset($item['date']) ? date('Y-m-d', strtotime($item['date'])) : null,
+                'content_id' => $contentId,
+                'title' => $title,
+                'description' => $description,
+                'sample_video_url' => $sampleVideoUrl,
+                'price' => $price,
+                'release_date' => $releaseDate,
                 'affiliate_url' => $item['affiliateURL'] ?? ($item['affiliate_url'] ?? null),
-                'thumbnail_url' => $item['imageURL']['large'] ?? ($item['imageURL']['small'] ?? null),
-                'genres' => $item['iteminfo']['genre'] ?? [],
-                'actresses' => $item['iteminfo']['actress'] ?? [],
-                'maker' => $item['iteminfo']['maker'][0] ?? null,
+                'thumbnail_url' => $thumbnail,
+                'genres' => $genres,
+                'actresses' => $actresses,
+                'maker' => $maker,
             ];
         }
 
         return [
-            'total_count' => $apiResponse['result']['total_count'] ?? 0,
+            'total_count' => (int)($apiResponse['result']['total_count'] ?? 0),
             'items' => $normalizedItems,
         ];
     }
