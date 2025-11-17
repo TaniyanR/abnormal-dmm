@@ -2,81 +2,210 @@
 declare(strict_types=1);
 
 // admin/api_settings.php
-// Admin UI to view/update DMM API fetch settings and trigger manual fetch.
-// Requires: src/bootstrap.php, src/helpers.php
+// Admin UI for DMM API fetch settings (merged, cleaned).
+// - Loads config / PDO from src/bootstrap.php or optional src/DB.php
+// - Auth: session is_admin OR Authorization: Bearer <ADMIN_TOKEN> OR ?token=<ADMIN_TOKEN> (dev)
+// - Persists to DB table `api_settings` using either (`key`,`value`) or legacy (`setting_key`,`setting_value`) schema.
+// - Falls back to .api_settings.json if no DB available.
+// - Uses session CSRF token for POSTs and does NOT expose ADMIN_TOKEN to the page.
 
-$container = require __DIR__ . '/../src/bootstrap.php';
-$pdo = $container['pdo'];
-$config = $container['config'];
+session_start();
 
-require_once __DIR__ . '/../src/helpers.php';
+require_once __DIR__ . '/../src/bootstrap.php';
 
-// Simple auth: Authorization: Bearer <token>
-$adminToken = $config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: '';
-$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-$providedToken = '';
-if (preg_match('/Bearer\s+(.+)/i', $authHeader, $m)) {
-    $providedToken = trim($m[1]);
+// Optional DB wrapper
+if (file_exists(__DIR__ . '/../src/DB.php')) {
+    require_once __DIR__ . '/../src/DB.php';
 }
 
-if (empty($adminToken) || $providedToken !== $adminToken) {
+// Obtain config / pdo from common places
+$config = $GLOBALS['config'] ?? (file_exists(__DIR__ . '/../.env.php') ? require __DIR__ . '/../.env.php' : []);
+$pdo = $GLOBALS['pdo'] ?? null;
+
+// If repository provides DB class, try to init it
+if (class_exists('\DB') && is_null($pdo)) {
+    try {
+        \DB::init($config);
+        $pdo = \DB::get();
+    } catch (Throwable $e) {
+        // ignore and fallback
+    }
+}
+
+// helper escape
+function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+
+// ADMIN token (do not echo)
+$adminToken = $config['ADMIN_TOKEN'] ?? ($config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: null);
+
+// Read Authorization header (case-insensitive)
+$headers = function_exists('getallheaders') ? getallheaders() : [];
+$authToken = null;
+if (!empty($headers['Authorization'])) {
+    if (preg_match('/Bearer\s+(.*)$/i', $headers['Authorization'], $m)) $authToken = trim($m[1]);
+} elseif (!empty($headers['authorization'])) {
+    if (preg_match('/Bearer\s+(.*)$/i', $headers['authorization'], $m)) $authToken = trim($m[1]);
+} elseif (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+    if (preg_match('/Bearer\s+(.*)$/i', $_SERVER['HTTP_AUTHORIZATION'], $m)) $authToken = trim($m[1]);
+}
+
+// session admin flag (optional integration)
+$loggedInAsAdmin = !empty($_SESSION['is_admin']) && $_SESSION['is_admin'] === true;
+
+// optional token via query for quick admin access (use with caution)
+$tokenParam = isset($_GET['token']) ? trim((string)$_GET['token']) : null;
+
+// Determine if viewer can see page
+$canView = false;
+if ($loggedInAsAdmin) $canView = true;
+if (!empty($adminToken) && !empty($authToken) && hash_equals((string)$adminToken, (string)$authToken)) $canView = true;
+if (!empty($adminToken) && !empty($tokenParam) && hash_equals((string)$adminToken, (string)$tokenParam)) $canView = true;
+if (empty($adminToken)) $canView = true; // developer convenience when ADMIN_TOKEN not set
+
+if (!$canView) {
     http_response_code(401);
-    echo '<h1>401 Unauthorized</h1><p>Valid Bearer token required.</p>';
+    echo '<!doctype html><meta charset="utf-8"><title>Unauthorized</title><h2>Unauthorized</h2><p>Provide Authorization: Bearer &lt;ADMIN_TOKEN&gt; or login as admin.</p>';
     exit;
 }
 
-// Helper function
-function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+// Using DB?
+$usingDb = ($pdo instanceof PDO);
 
-$messages = [];
-
-// Handle POST updates
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $fields = [
-        'API_RUN_INTERVAL',
-        'API_FETCH_COUNT',
-        'API_FETCH_TOTAL',
-        'API_SORT',
-        'API_GTE_DATE',
-        'API_LTE_DATE',
-        'API_SITE',
-        'API_SERVICE',
-        'API_FLOOR'
-    ];
-    
-    foreach ($fields as $f) {
-        $val = $_POST[$f] ?? '';
-        // API_FETCH_COUNT capped at 100 for storage
-        if ($f === 'API_FETCH_COUNT') {
-            $val = (string)min(100, max(1, (int)$val));
-        }
-        
-        // Update or insert
-        $stmt = $pdo->prepare("INSERT INTO api_settings (setting_key, setting_value) VALUES (?, ?) 
-                               ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $stmt->execute([$f, $val]);
+// Ensure preferred table exists when using DB (best-effort)
+if ($usingDb) {
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `api_settings` (
+            `key` VARCHAR(64) NOT NULL PRIMARY KEY,
+            `value` TEXT NULL,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {
+        // ignore
     }
-    $messages[] = ['type' => 'success', 'text' => 'Settings saved successfully!'];
-}
-
-// Load current settings
-$stmt = $pdo->query("SELECT setting_key, setting_value FROM api_settings");
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$current = [];
-foreach ($rows as $r) {
-    $current[$r['setting_key']] = $r['setting_value'];
 }
 
 // Defaults
-$current['API_RUN_INTERVAL'] = $current['API_RUN_INTERVAL'] ?? '3600';
-$current['API_FETCH_COUNT'] = $current['API_FETCH_COUNT'] ?? '20';
-$current['API_FETCH_TOTAL'] = $current['API_FETCH_TOTAL'] ?? '100';
-$current['API_SORT'] = $current['API_SORT'] ?? '-date';
-$current['API_GTE_DATE'] = $current['API_GTE_DATE'] ?? '';
-$current['API_LTE_DATE'] = $current['API_LTE_DATE'] ?? '';
-$current['API_SITE'] = $current['API_SITE'] ?? 'FANZA';
-$current['API_SERVICE'] = $current['API_SERVICE'] ?? 'digital';
-$current['API_FLOOR'] = $current['API_FLOOR'] ?? 'videoa';
+$defaults = [
+    'API_RUN_INTERVAL' => '3600',
+    'API_FETCH_COUNT'  => '20',
+    'API_FETCH_TOTAL'  => '100',
+    'API_SORT'         => 'date',
+    'API_GTE_DATE'     => '',
+    'API_LTE_DATE'     => '',
+    'API_SITE'         => 'FANZA',
+    'API_SERVICE'      => 'digital',
+    'API_FLOOR'        => 'videoa',
+];
+
+// Load current settings (DB or file fallback). Support both schemas for compatibility.
+$current = [];
+if ($usingDb) {
+    try {
+        $stmt = $pdo->query("SELECT `key`,`value` FROM `api_settings`");
+        if ($stmt !== false) {
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $current[$row['key']] = $row['value'];
+            }
+        }
+    } catch (Throwable $e) {
+        // try older naming
+        try {
+            $stmt = $pdo->query("SELECT `setting_key` AS `key`, `setting_value` AS `value` FROM `api_settings`");
+            if ($stmt !== false) {
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $current[$row['key']] = $row['value'];
+                }
+            }
+        } catch (Throwable $e2) {
+            // ignore and fallback to file
+            $current = [];
+        }
+    }
+} else {
+    $settingsFile = __DIR__ . '/../.api_settings.json';
+    if (file_exists($settingsFile)) {
+        $saved = json_decode((string)@file_get_contents($settingsFile), true);
+        if (is_array($saved)) $current = $saved;
+    }
+}
+
+// Merge defaults for missing keys
+foreach ($defaults as $k => $v) {
+    if (!isset($current[$k])) $current[$k] = $v;
+}
+
+// Prepare CSRF token in session
+if (empty($_SESSION['csrf_token'])) {
+    try {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+    } catch (Throwable $e) {
+        $_SESSION['csrf_token'] = bin2hex(md5(uniqid('', true)));
+    }
+}
+$csrfToken = $_SESSION['csrf_token'];
+
+$messages = [];
+
+// Handle POST (save settings). Allow when session admin, Authorization header matches, or valid CSRF
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postToken = $_POST['_token'] ?? '';
+    $authOk = false;
+    if ($loggedInAsAdmin) $authOk = true;
+    if (!empty($adminToken) && !empty($authToken) && hash_equals((string)$adminToken, (string)$authToken)) $authOk = true;
+    if (!empty($postToken) && hash_equals((string)$postToken, (string)$_SESSION['csrf_token'])) $authOk = true;
+
+    if (!$authOk) {
+        http_response_code(403);
+        $messages[] = ['type' => 'error', 'text' => 'Forbidden: invalid CSRF/auth'];
+    } else {
+        // sanitize & validate inputs
+        $new = [];
+        $new['API_RUN_INTERVAL'] = (string) (int) ($_POST['API_RUN_INTERVAL'] ?? $defaults['API_RUN_INTERVAL']);
+        $new['API_FETCH_COUNT']  = (string) min(100, max(1, (int)($_POST['API_FETCH_COUNT'] ?? $defaults['API_FETCH_COUNT'])));
+        $new['API_FETCH_TOTAL']  = (string) min(1000, max(1, (int)($_POST['API_FETCH_TOTAL'] ?? $defaults['API_FETCH_TOTAL'])));
+        $new['API_SORT']         = trim((string)($_POST['API_SORT'] ?? $defaults['API_SORT']));
+        $new['API_GTE_DATE']     = trim((string)($_POST['API_GTE_DATE'] ?? ''));
+        $new['API_LTE_DATE']     = trim((string)($_POST['API_LTE_DATE'] ?? ''));
+        $new['API_SITE']         = trim((string)($_POST['API_SITE'] ?? $defaults['API_SITE']));
+        $new['API_SERVICE']      = trim((string)($_POST['API_SERVICE'] ?? $defaults['API_SERVICE']));
+        $new['API_FLOOR']        = trim((string)($_POST['API_FLOOR'] ?? $defaults['API_FLOOR']));
+
+        // persist to DB or to file
+        if ($usingDb) {
+            try {
+                $ins = $pdo->prepare("INSERT INTO `api_settings` (`key`, `value`, `updated_at`) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `updated_at` = NOW()");
+                foreach ($new as $k => $v) {
+                    $ins->execute([$k, (string)$v]);
+                }
+                $messages[] = ['type' => 'success', 'text' => 'Settings saved to DB (key/value)'];
+                $current = $new;
+            } catch (Throwable $e) {
+                // fallback to older schema
+                try {
+                    $ins2 = $pdo->prepare("INSERT INTO `api_settings` (`setting_key`, `setting_value`, `updated_at`) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`), `updated_at` = NOW()");
+                    foreach ($new as $k => $v) {
+                        $ins2->execute([$k, (string)$v]);
+                    }
+                    $messages[] = ['type' => 'success', 'text' => 'Settings saved to DB (setting_key/setting_value)'];
+                    $current = $new;
+                } catch (Throwable $e2) {
+                    $messages[] = ['type' => 'error', 'text' => 'DB save failed: ' . $e2->getMessage()];
+                }
+            }
+        } else {
+            try {
+                $settingsFile = __DIR__ . '/../.api_settings.json';
+                file_put_contents($settingsFile, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                $messages[] = ['type' => 'success', 'text' => 'Settings saved locally (.api_settings.json)'];
+                $current = $new;
+            } catch (Throwable $e) {
+                $messages[] = ['type' => 'error', 'text' => 'Failed to save settings to file: ' . $e->getMessage()];
+            }
+        }
+    }
+}
+
+// HTML output (do NOT expose admin token)
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -85,140 +214,46 @@ $current['API_FLOOR'] = $current['API_FLOOR'] ?? 'videoa';
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin API Settings - abnormal-dmm</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f5f5f5;
-  padding: 2rem;
-  line-height: 1.6;
-}
-.container {
-  max-width: 800px;
-  margin: 0 auto;
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-h1 { margin-bottom: 1.5rem; color: #333; }
-h2 { margin-top: 2rem; margin-bottom: 1rem; color: #555; }
-.msg {
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 4px;
-}
-.msg.success {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-.msg.error {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
-.field {
-  margin-bottom: 1.5rem;
-}
-.field.small {
-  max-width: 500px;
-}
-label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: #555;
-}
-input[type="text"],
-input[type="number"],
-select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-input[type="text"].small,
-input[type="number"].small {
-  max-width: 300px;
-}
-.note {
-  font-size: 0.875rem;
-  color: #777;
-  margin-top: 0.25rem;
-}
-.actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-top: 2rem;
-}
-.btn {
-  padding: 0.75rem 1.5rem;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 500;
-}
-.btn:hover {
-  background: #0056b3;
-}
-.btn.secondary {
-  background: #6c757d;
-}
-.btn.secondary:hover {
-  background: #545b62;
-}
-hr {
-  margin: 2rem 0;
-  border: none;
-  border-top: 1px solid #ddd;
-}
-.status-box {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  padding: 1rem;
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 400px;
-  overflow-y: auto;
-}
-code {
-  background: #f1f1f1;
-  padding: 0.2rem 0.4rem;
-  border-radius: 3px;
-  font-size: 0.9rem;
-}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width:800px; margin:40px auto; padding:0 20px; background:#f5f5f5; color:#333; }
+.container { background:#fff; padding:30px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.06); }
+h1{margin-top:0;color:#2c3e50;}
+.field{margin-bottom:20px;}
+.field.small{max-width:420px;}
+label{display:block;font-weight:600;margin-bottom:6px;color:#444;}
+input[type="text"],input[type="number"],select{width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;}
+.note{font-size:12px;color:#666;margin-top:6px;}
+.actions{margin-top:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.btn{padding:10px 18px;border-radius:6px;border:0;background:#1f6feb;color:#fff;cursor:pointer;}
+.btn.secondary{background:#6c757d;}
+.msg{padding:10px;border-radius:6px;margin-bottom:12px;}
+.msg.success{background:#e6ffed;border:1px solid #b7f0c9;color:#064e1a;}
+.msg.error{background:#ffecec;border:1px solid #f4b0b0;color:#6b1b1b;}
+.status-box{background:#f8f9fa;border:1px solid #e6e7ea;padding:12px;border-radius:6px;font-family:monospace;white-space:pre-wrap;max-height:360px;overflow:auto;}
 </style>
 </head>
 <body>
-
 <div class="container">
   <h1>API Fetch Settings</h1>
 
   <?php foreach ($messages as $m): ?>
-    <div class="msg <?php echo h($m['type']); ?>"><?= h($m['text']); ?></div>
+    <div class="msg <?php echo h($m['type']); ?>"><?php echo h($m['text']); ?></div>
   <?php endforeach; ?>
 
   <form method="post" id="settingsForm">
+    <input type="hidden" name="_token" value="<?php echo h($csrfToken); ?>">
+
     <div class="field small">
       <label for="API_RUN_INTERVAL">API_RUN_INTERVAL (seconds)</label>
       <select id="API_RUN_INTERVAL" name="API_RUN_INTERVAL">
         <?php foreach ([3600,10800,21600,43200,86400] as $i): ?>
-          <option value="<?php echo $i; ?>" <?php echo (string)$current['API_RUN_INTERVAL'] === (string)$i ? 'selected' : ''; ?>>
-            <?php echo $i; ?> (<?php echo ($i/3600); ?>h)</option>
+          <option value="<?php echo $i; ?>" <?php echo ((string)$current['API_RUN_INTERVAL'] === (string)$i) ? 'selected' : ''; ?>><?php echo $i; ?> (<?php echo ($i/3600); ?>h)</option>
         <?php endforeach; ?>
       </select>
       <div class="note">取得間隔（秒）。例: 3600 = 1h</div>
     </div>
 
     <div class="field small">
-      <label for="API_FETCH_COUNT">API_FETCH_COUNT (per request, stored capped at 100)</label>
+      <label for="API_FETCH_COUNT">API_FETCH_COUNT (per request, capped at 100)</label>
       <input type="number" id="API_FETCH_COUNT" name="API_FETCH_COUNT" min="1" max="1000" value="<?php echo h($current['API_FETCH_COUNT']); ?>">
       <div class="note">DMM API の hits。保存時は最大 100 に制限されます。</div>
     </div>
@@ -226,7 +261,7 @@ code {
     <div class="field small">
       <label for="API_FETCH_TOTAL">API_FETCH_TOTAL (total items to fetch)</label>
       <input type="number" id="API_FETCH_TOTAL" name="API_FETCH_TOTAL" min="1" max="1000" value="<?php echo h($current['API_FETCH_TOTAL']); ?>">
-      <div class="note">管理画面でまとめて取得したい合計件数（offset をずらして複数リクエストします）</div>
+      <div class="note">合計取得件数（offset をずらして複数リクエストします）。</div>
     </div>
 
     <div class="field small">
@@ -262,7 +297,7 @@ code {
     <div class="actions">
       <button type="submit" class="btn">Save Settings</button>
       <button type="button" id="runFetchBtn" class="btn secondary">Run manual fetch</button>
-      <input type="text" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="small" value="">
+      <input type="text" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="input small" value="">
     </div>
   </form>
 
@@ -270,19 +305,18 @@ code {
 
   <h2>Manual Fetch Output</h2>
   <div id="fetchResult" class="status-box">Not run yet.</div>
-  <div class="note">Manual fetch calls <code>/api/admin/fetch</code> via fetch and shows JSON response.</div>
+  <div class="note">Manual fetch calls <code>/public/api/admin/fetch.php</code> via fetch and shows JSON response.</div>
 </div>
 
 <script src="/public/assets/js/admin.js"></script>
 <script>
 (function(){
-  // expose needed values to admin.js
+  // expose endpoint to the admin.js; do NOT expose the real ADMIN_TOKEN
   window.__ADMIN_UI = {
-    fetchEndpoint: '/api/admin/fetch',
-    defaultToken: '<?php echo h($adminToken ?? ''); ?>'
+    fetchEndpoint: '/public/api/admin/fetch.php',
+    defaultToken: '' // leave blank for security
   };
 })();
 </script>
-
 </body>
 </html>
