@@ -1,76 +1,106 @@
-// public/assets/js/admin.js
-// Admin UI JavaScript for manual fetch trigger
+/**
+ * public/assets/js/admin.js
+ * Admin UI JavaScript for manual fetch trigger
+ */
 
 (function() {
   'use strict';
 
-  // Wait for DOM to be ready
-  document.addEventListener('DOMContentLoaded', function() {
+  // Wait for DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  function init() {
     const runFetchBtn = document.getElementById('runFetchBtn');
     const fetchResult = document.getElementById('fetchResult');
     const manualTokenInput = document.getElementById('manualToken');
 
     if (!runFetchBtn || !fetchResult) {
-      console.warn('Admin UI elements not found');
+      // Elements not found on page — nothing to do
+      console.warn('Admin UI elements not found: runFetchBtn or fetchResult missing');
       return;
     }
 
-    // Get configuration from global
-    const config = window.__ADMIN_UI || {};
-    const fetchEndpoint = config.fetchEndpoint || '/public/api/admin/fetch.php';
-    const defaultToken = config.defaultToken || '';
+    // Attach handler
+    runFetchBtn.addEventListener('click', handleManualFetch);
 
-    runFetchBtn.addEventListener('click', async function() {
+    async function handleManualFetch(e) {
+      e && e.preventDefault();
+
+      const config = window.__ADMIN_UI || {};
+      const endpoint = config.fetchEndpoint || '/public/api/admin/fetch.php';
+      const defaultToken = config.defaultToken || '';
+      const manualToken = manualTokenInput ? manualTokenInput.value.trim() : '';
+      const token = manualToken || defaultToken;
+
+      if (!token) {
+        fetchResult.textContent = 'Error: No admin token provided. Please set ADMIN_TOKEN in config or enter it in the field.';
+        fetchResult.style.color = '#c0392b';
+        return;
+      }
+
+      // Disable UI while running
       runFetchBtn.disabled = true;
       runFetchBtn.textContent = 'Running...';
-      fetchResult.textContent = 'Fetching...';
-      fetchResult.style.background = '#fff3cd';
-      fetchResult.style.color = '#856404';
+      fetchResult.textContent = 'Sending request to ' + endpoint + ' ...';
+      fetchResult.style.color = '#333';
+
+      // Default payload: request total items. Adjust if backend expects hits/offset.
+      const payload = {
+        total: 100
+        // hits: 20,
+        // offset: 1
+      };
 
       try {
-        // Use token from input or default
-        const token = manualTokenInput.value.trim() || defaultToken;
-        
-        if (!token) {
-          throw new Error('No admin token provided');
-        }
-
-        const headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        };
-
-        const response = await fetch(fetchEndpoint, {
+        const resp = await fetch(endpoint, {
           method: 'POST',
-          headers: headers,
-          body: JSON.stringify({})
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
-
-        // Display result
-        if (response.ok) {
-          fetchResult.style.background = '#d4edda';
-          fetchResult.style.color = '#155724';
-          fetchResult.textContent = 'Success!\n' + JSON.stringify(data, null, 2);
-        } else {
-          fetchResult.style.background = '#f8d7da';
-          fetchResult.style.color = '#721c24';
-          fetchResult.textContent = 'Error: ' + (data.error || data.message || 'Unknown error') + '\n' + JSON.stringify(data, null, 2);
+        const text = await resp.text();
+        let data = null;
+        try {
+          data = JSON.parse(text);
+        } catch (err) {
+          // Not JSON — show raw text
+          fetchResult.textContent = 'Response (HTTP ' + resp.status + '):\n\n' + text;
+          fetchResult.style.color = resp.ok ? '#27ae60' : '#c0392b';
+          return;
         }
+
+        // Show formatted JSON
+        const pretty = JSON.stringify(data, null, 2);
+        fetchResult.textContent = 'Response (HTTP ' + resp.status + '):\n\n' + pretty;
+
+        // Determine success heuristically
+        const okFlag = resp.ok || data.status === 'done' || data.success === true || data.status === 'ok';
+        fetchResult.style.color = okFlag ? '#27ae60' : '#c0392b';
       } catch (error) {
-        fetchResult.style.background = '#f8d7da';
-        fetchResult.style.color = '#721c24';
-        fetchResult.textContent = 'Error: ' + error.message;
+        console.error('Manual fetch failed', error);
+        fetchResult.textContent = 'Request failed: ' + (error && error.message ? error.message : String(error));
+        fetchResult.style.color = '#c0392b';
       } finally {
         runFetchBtn.disabled = false;
         runFetchBtn.textContent = 'Run manual fetch';
       }
-    });
-
-    // Set default token if available
-    if (defaultToken && manualTokenInput) {
-      manualTokenInput.value = defaultToken;
     }
-  });
+
+    // Populate manual token input if defaultToken is provided via window.__ADMIN_UI (but keep defaultToken empty in UI by default)
+    try {
+      const cfg = window.__ADMIN_UI || {};
+      if (cfg.defaultToken && manualTokenInput && !manualTokenInput.value) {
+        manualTokenInput.value = cfg.defaultToken;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
 })();
