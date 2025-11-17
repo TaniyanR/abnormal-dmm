@@ -26,6 +26,7 @@
       return;
     }
 
+    // Attach handler
     runFetchBtn.addEventListener('click', handleManualFetch);
 
     async function handleManualFetch(e) {
@@ -50,7 +51,7 @@
       fetchResult.textContent = 'Sending request to ' + endpoint + ' ...';
       fetchResult.style.color = '#333';
 
-      // Payload: default uses total. Replace with hits/offset if needed.
+      // Payload: default uses total. Replace with hits/offset if needed by your backend.
       const payload = {
         total: 100
         // hits: 20,
