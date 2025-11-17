@@ -31,3 +31,4 @@ mariadb_data/
 
 # Other local-only files
 *.env.local
+.env.php
