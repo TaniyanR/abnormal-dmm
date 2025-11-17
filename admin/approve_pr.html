@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Approve PR (管理)</title>
+  <style>
+    body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; padding:16px;}
+    label{display:block;margin-top:8px;font-weight:600}
+    input{width:100%;padding:8px;margin-top:4px}
+    button{margin-top:12px;padding:10px 16px;background:#2d8cff;color:#fff;border:0;border-radius:6px}
+    #result{margin-top:12px;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <h2>Pull Request 承認 (Approve)</h2>
+
+  <label>Owner (例: TaniyanR)</label>
+  <input id="owner" type="text" value="TaniyanR" />
+
+  <label>Repository (例: abnormal-dmm)</label>
+  <input id="repo" type="text" value="abnormal-dmm" />
+
+  <label>PR 番号 (例: 93)</label>
+  <input id="pr" type="number" placeholder="プルリク番号を入力" />
+
+  <button id="approve">承認する（Approve）</button>
+
+  <div id="result"></div>
+
+  <script>
+    const btn = document.getElementById('approve');
+    btn.addEventListener('click', async () => {
+      document.getElementById('result').textContent = '送信中...';
+      const owner = document.getElementById('owner').value.trim();
+      const repo = document.getElementById('repo').value.trim();
+      const pr = document.getElementById('pr').value.trim();
+      if (!owner || !repo || !pr) { document.getElementById('result').textContent = '必須項目が未入力です。'; return; }
+      try {
+        const res = await fetch('/admin/approve_pr.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ owner, repo, pr })
+        });
+        const data = await res.json();
+        document.getElementById('result').textContent = JSON.stringify({ status: res.status, body: data }, null, 2);
+      } catch (err) {
+        document.getElementById('result').textContent = 'エラー: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
