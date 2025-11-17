@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 // admin/api_settings.php
-// Merged, conflict-resolved admin UI for API fetch settings.
-// Requirements: src/bootstrap.php (may provide $config / $pdo), optional src/DB.php, .env.php (ADMIN_TOKEN)
+// Merged and conflict-resolved admin UI for API fetch settings.
+// Requires: src/bootstrap.php (may provide $config / $pdo), optional src/DB.php, .env.php (ADMIN_TOKEN)
 
 session_start();
 

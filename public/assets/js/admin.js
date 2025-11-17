@@ -31,6 +31,7 @@
       e && e.preventDefault();
 
       const config = window.__ADMIN_UI || {};
+      // Default endpoint used by the admin UI
       const endpoint = config.fetchEndpoint || '/public/api/admin/fetch.php';
       const defaultToken = config.defaultToken || '';
       const manualToken = manualTokenInput ? manualTokenInput.value.trim() : '';
@@ -93,7 +94,7 @@
       }
     }
 
-    // Populate manual token input if defaultToken is provided via window.__ADMIN_UI (but keep defaultToken empty in UI by default)
+    // Populate manual token input if defaultToken is provided via window.__ADMIN_UI (defaultToken is left blank by default for security)
     try {
       const cfg = window.__ADMIN_UI || {};
       if (cfg.defaultToken && manualTokenInput && !manualTokenInput.value) {
