@@ -2,24 +2,27 @@
 declare(strict_types=1);
 
 // admin/api_settings.php
-// Consolidated admin UI for API fetch settings.
-// Requirements: src/bootstrap.php (may set $config / $pdo), optional src/DB.php, .env.php (ADMIN_TOKEN)
+// Final merged admin UI for DMM API fetch settings.
+// - Loads config / PDO from src/bootstrap.php or optional src/DB.php
+// - Auth: session is_admin OR Authorization: Bearer <ADMIN_TOKEN> OR ?token=<ADMIN_TOKEN> (dev)
+// - Persists to DB table `api_settings` (columns `key`/`value`) when available, otherwise falls back to .api_settings.json
+// - Uses session CSRF token for POSTs
+// - Does NOT expose ADMIN_TOKEN into the page
 
 session_start();
 
-// bootstrap (may register autoloaders, set $config / $pdo, etc.)
 require_once __DIR__ . '/../src/bootstrap.php';
 
-// optional DB wrapper
+// Optional DB wrapper
 if (file_exists(__DIR__ . '/../src/DB.php')) {
     require_once __DIR__ . '/../src/DB.php';
 }
 
-// Obtain configuration and PDO if provided by bootstrap
+// Try to obtain config and pdo from common locations
 $config = $GLOBALS['config'] ?? (file_exists(__DIR__ . '/../.env.php') ? require __DIR__ . '/../.env.php' : []);
 $pdo = $GLOBALS['pdo'] ?? null;
 
-// If a DB class exists, try to initialize/get PDO from it
+// If project provides DB class, try to initialize it
 if (class_exists('\DB') && is_null($pdo)) {
     try {
         \DB::init($config);
@@ -29,10 +32,10 @@ if (class_exists('\DB') && is_null($pdo)) {
     }
 }
 
-// Helper for escaping output
+// helper escape
 function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
-// Determine admin token but do not echo it into the page
+// ADMIN token (do not echo)
 $adminToken = $config['ADMIN_TOKEN'] ?? ($config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: null);
 
 // Read Authorization header (case-insensitive)
@@ -46,18 +49,18 @@ if (!empty($headers['Authorization'])) {
     if (preg_match('/Bearer\s+(.*)$/i', $_SERVER['HTTP_AUTHORIZATION'], $m)) $authToken = trim($m[1]);
 }
 
-// session admin flag (optional integration)
+// session admin flag
 $loggedInAsAdmin = !empty($_SESSION['is_admin']) && $_SESSION['is_admin'] === true;
 
-// optional token via query for quick admin access (use with caution)
+// optional query token for quick access (use with caution!)
 $tokenParam = isset($_GET['token']) ? trim((string)$_GET['token']) : null;
 
-// Determine if viewer is allowed
+// determine view permission
 $canView = false;
 if ($loggedInAsAdmin) $canView = true;
 if (!empty($adminToken) && !empty($authToken) && hash_equals((string)$adminToken, (string)$authToken)) $canView = true;
 if (!empty($adminToken) && !empty($tokenParam) && hash_equals((string)$adminToken, (string)$tokenParam)) $canView = true;
-if (empty($adminToken)) $canView = true; // development convenience when no ADMIN_TOKEN set
+if (empty($adminToken)) $canView = true; // dev convenience
 
 if (!$canView) {
     http_response_code(401);
@@ -65,10 +68,10 @@ if (!$canView) {
     exit;
 }
 
-// Use PDO when available, otherwise fallback to file storage
+// using DB?
 $usingDb = ($pdo instanceof PDO);
 
-// Ensure settings table exists when using DB
+// Ensure table exists if using DB (preferred schema: `key`, `value`)
 if ($usingDb) {
     try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS `api_settings` (
@@ -77,11 +80,11 @@ if ($usingDb) {
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) {
-        // ignore
+        // ignore creation errors; we'll still attempt reads/writes and handle failures gracefully
     }
 }
 
-// Defaults
+// defaults
 $defaults = [
     'API_RUN_INTERVAL' => '3600',
     'API_FETCH_COUNT'  => '20',
@@ -94,10 +97,11 @@ $defaults = [
     'API_FLOOR'        => 'videoa',
 ];
 
-// Load current settings (DB or file fallback)
+// load current settings (try both common schemas for compatibility)
 $current = [];
 if ($usingDb) {
     try {
+        // try preferred schema first
         $stmt = $pdo->query("SELECT `key`,`value` FROM `api_settings`");
         if ($stmt !== false) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -105,7 +109,18 @@ if ($usingDb) {
             }
         }
     } catch (Throwable $e) {
-        // ignore
+        // fallback: older schema naming
+        try {
+            $stmt = $pdo->query("SELECT `setting_key` AS `key`, `setting_value` AS `value` FROM `api_settings`");
+            if ($stmt !== false) {
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $current[$row['key']] = $row['value'];
+                }
+            }
+        } catch (Throwable $e2) {
+            // ignore, will fallback to file
+            $current = [];
+        }
     }
 } else {
     $settingsFile = __DIR__ . '/../.api_settings.json';
@@ -115,12 +130,12 @@ if ($usingDb) {
     }
 }
 
-// Merge defaults
+// merge defaults
 foreach ($defaults as $k => $v) {
     if (!isset($current[$k])) $current[$k] = $v;
 }
 
-// Prepare CSRF token in session for form submissions
+// CSRF token
 if (empty($_SESSION['csrf_token'])) {
     try {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
@@ -132,7 +147,7 @@ $csrfToken = $_SESSION['csrf_token'];
 
 $messages = [];
 
-// Handle POST to save settings
+// Handle POST: accept if session admin OR Authorization header matches OR valid CSRF
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postToken = $_POST['_token'] ?? '';
     $authOk = false;
@@ -142,9 +157,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$authOk) {
         http_response_code(403);
-        $messages[] = ['type' => 'error', 'text' => 'Forbidden: invalid CSRF / auth'];
+        $messages[] = ['type' => 'error', 'text' => 'Forbidden: invalid CSRF/auth'];
     } else {
-        // sanitize inputs and enforce caps
+        // sanitize & validate
         $new = [];
         $new['API_RUN_INTERVAL'] = (string) (int) ($_POST['API_RUN_INTERVAL'] ?? $defaults['API_RUN_INTERVAL']);
         $new['API_FETCH_COUNT']  = (string) min(100, max(1, (int)($_POST['API_FETCH_COUNT'] ?? $defaults['API_FETCH_COUNT'])));
@@ -156,19 +171,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new['API_SERVICE']      = trim((string)($_POST['API_SERVICE'] ?? $defaults['API_SERVICE']));
         $new['API_FLOOR']        = trim((string)($_POST['API_FLOOR'] ?? $defaults['API_FLOOR']));
 
-        // persist settings
+        // persist
         if ($usingDb) {
+            // try preferred schema writes; if fails attempt older schema
             try {
                 $ins = $pdo->prepare("INSERT INTO `api_settings` (`key`, `value`, `updated_at`) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `updated_at` = NOW()");
                 foreach ($new as $k => $v) {
                     $ins->execute([$k, (string)$v]);
                 }
-                $messages[] = ['type' => 'success', 'text' => 'Settings saved successfully!'];
+                $messages[] = ['type' => 'success', 'text' => 'Settings saved to DB (key/value)'];
                 $current = $new;
             } catch (Throwable $e) {
-                $messages[] = ['type' => 'error', 'text' => 'Failed to save settings: ' . $e->getMessage()];
+                // fallback to older schema names
+                try {
+                    $ins2 = $pdo->prepare("INSERT INTO `api_settings` (`setting_key`, `setting_value`, `updated_at`) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`), `updated_at` = NOW()");
+                    foreach ($new as $k => $v) {
+                        $ins2->execute([$k, (string)$v]);
+                    }
+                    $messages[] = ['type' => 'success', 'text' => 'Settings saved to DB (setting_key/setting_value)'];
+                    $current = $new;
+                } catch (Throwable $e2) {
+                    $messages[] = ['type' => 'error', 'text' => 'DB save failed: ' . $e2->getMessage()];
+                }
             }
         } else {
+            // file fallback
             try {
                 $settingsFile = __DIR__ . '/../.api_settings.json';
                 file_put_contents($settingsFile, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -181,40 +208,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// HTML output
+// HTML output (do NOT expose admin token)
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin API Settings - abnormal-dmm</title>
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  max-width: 800px;
-  margin: 40px auto;
-  padding: 0 20px;
-  background: #f5f5f5;
-  color: #333;
-}
-.container { background:#fff; padding:30px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
-h1 { color:#2c3e50; margin-top:0; }
-.msg { padding:12px 16px; margin:10px 0; border-left:4px solid; border-radius:4px; }
-.msg.success { background:#d4edda; border-color:#28a745; color:#155724; }
-.msg.error { background:#f8d7da; border-color:#dc3545; color:#721c24; }
-.field { margin-bottom:20px; }
-.field.small { max-width:400px; }
-label { display:block; font-weight:600; margin-bottom:5px; color:#555; }
-input[type="text"], input[type="number"], select { width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:4px; box-sizing:border-box; }
-.note { font-size:12px; color:#777; margin-top:4px; }
-.actions { margin-top:30px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-.btn { padding:10px 20px; border:none; border-radius:4px; font-weight:600; cursor:pointer; }
-.btn:not(.secondary) { background:#3498db; color:#fff; }
-.btn.secondary { background:#95a5a6; color:#fff; }
-.input.small { max-width:300px; }
-hr { margin:30px 0; border:none; border-top:1px solid #ddd; }
-.status-box { background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px; padding:15px; font-family:monospace; font-size:13px; white-space:pre-wrap; max-height:400px; overflow-y:auto; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width:800px; margin:40px auto; padding:0 20px; background:#f5f5f5; color:#333; }
+.container { background:#fff; padding:30px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.06); }
+h1{margin-top:0;color:#2c3e50;}
+.field{margin-bottom:20px;}
+.field.small{max-width:420px;}
+label{display:block;font-weight:600;margin-bottom:6px;color:#444;}
+input[type="text"],input[type="number"],select{width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;}
+.note{font-size:12px;color:#666;margin-top:6px;}
+.actions{margin-top:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.btn{padding:10px 18px;border-radius:6px;border:0;background:#1f6feb;color:#fff;cursor:pointer;}
+.btn.secondary{background:#6c757d;}
+.msg{padding:10px;border-radius:6px;margin-bottom:12px;}
+.msg.success{background:#e6ffed;border:1px solid #b7f0c9;color:#064e1a;}
+.msg.error{background:#ffecec;border:1px solid #f4b0b0;color:#6b1b1b;}
+.status-box{background:#f8f9fa;border:1px solid #e6e7ea;padding:12px;border-radius:6px;font-family:monospace;white-space:pre-wrap;max-height:360px;overflow:auto;}
 </style>
 </head>
 <body>
