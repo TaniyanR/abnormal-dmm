@@ -89,6 +89,21 @@ curl -X POST http://localhost:8000/api/admin/fetch \
   -d '{"hits": 20, "offset": 1}'
 ```
 
+## Admin Interface / 管理画面
+
+A web-based admin interface is available for managing API fetch settings:
+
+```
+http://localhost:8000/admin/api_settings.php
+```
+
+Features:
+- Configure API fetch parameters (interval, count, filters)
+- Manually trigger data fetches from DMM API
+- View fetch results in real-time
+
+See [admin/README.md](admin/README.md) for detailed documentation.
+
 ## Project Structure
 
 ```
@@ -96,6 +111,9 @@ abnormal-dmm/
 ├── docker-compose.yml
 ├── .env.example
 ├── README.md
+├── admin/                     # Admin web interface
+│   ├── api_settings.php       # API settings UI
+│   └── README.md
 ├── db/
 │   └── init.sql
 ├── src/
@@ -105,12 +123,15 @@ abnormal-dmm/
 │   ├── ItemRepository.php
 │   └── DmmClient.php
 ├── public/
-│   └── index.php
-└── video-store/           # Modular video store feature (MVC structure)
-    ├── models/            # Data models
-    ├── services/          # Business logic
-    ├── controllers/       # API controllers
-    ├── views/             # Frontend templates
+│   ├── index.php
+│   └── assets/
+│       └── js/
+│           └── admin.js       # Admin UI JavaScript
+└── video-store/               # Modular video store feature (MVC structure)
+    ├── models/                # Data models
+    ├── services/              # Business logic
+    ├── controllers/           # API controllers
+    ├── views/                 # Frontend templates
     └── VideoStoreConfig.php
 ```
 
