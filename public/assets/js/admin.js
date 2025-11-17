@@ -1,12 +1,12 @@
 /**
- * admin.js
- * JavaScript for admin UI manual fetch functionality
+ * public/assets/js/admin.js
+ * Admin UI JavaScript for manual fetch trigger
  */
 
 (function() {
   'use strict';
 
-  // Wait for DOM to be ready
+  // Wait for DOM ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
@@ -19,74 +19,79 @@
     const manualTokenInput = document.getElementById('manualToken');
 
     if (!runFetchBtn || !fetchResult) {
-      return; // Elements not present on this page
+      // Elements not found on page — nothing to do
+      console.warn('Admin UI elements not found: runFetchBtn or fetchResult missing');
+      return;
     }
 
-    runFetchBtn.addEventListener('click', function() {
-      runManualFetch();
-    });
+    // Attach handler
+    runFetchBtn.addEventListener('click', handleManualFetch);
 
-    function runManualFetch() {
+    async function handleManualFetch(e) {
+      e && e.preventDefault();
+
       const config = window.__ADMIN_UI || {};
-      const endpoint = config.fetchEndpoint || '/api/admin/fetch';
-      let token = manualTokenInput.value.trim();
-
-      // Use default token if manual input is empty
-      if (!token && config.defaultToken) {
-        token = config.defaultToken;
-      }
+      // Default endpoint matches admin UI: /public/api/admin/fetch.php
+      const endpoint = config.fetchEndpoint || '/public/api/admin/fetch.php';
+      const defaultToken = config.defaultToken || '';
+      const manualToken = manualTokenInput ? manualTokenInput.value.trim() : '';
+      const token = manualToken || defaultToken;
 
       if (!token) {
-        fetchResult.textContent = 'Error: No ADMIN_TOKEN provided. Enter token in the field above or ensure default token is set.';
-        fetchResult.style.color = '#dc3545';
+        fetchResult.textContent = 'Error: No admin token provided. Please set ADMIN_TOKEN in config or enter it in the field.';
+        fetchResult.style.color = '#c0392b';
         return;
       }
 
-      // Disable button and show loading
+      // Disable UI while running
       runFetchBtn.disabled = true;
-      runFetchBtn.textContent = 'Fetching...';
-      fetchResult.textContent = 'Sending request to ' + endpoint + '...';
-      fetchResult.style.color = '#666';
+      runFetchBtn.textContent = 'Running...';
+      fetchResult.textContent = 'Sending request to ' + endpoint + ' ...';
+      fetchResult.style.color = '#333';
 
-      // Prepare request
-      const requestData = {
-        hits: 20,
-        offset: 1
+      // Prepare payload: server accepts { total: N } by default.
+      // If your endpoint expects hits/offset instead, replace or add them.
+      const payload = {
+        total: 100
+        // hits: 20,
+        // offset: 1
       };
 
-      fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify(requestData)
-      })
-      .then(function(response) {
-        return response.json().then(function(data) {
-          return { status: response.status, data: data };
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(payload)
         });
-      })
-      .then(function(result) {
-        // Display result
-        const formatted = JSON.stringify(result.data, null, 2);
-        fetchResult.textContent = 'Response (HTTP ' + result.status + '):\n' + formatted;
-        
-        if (result.status === 200 && result.data.success) {
-          fetchResult.style.color = '#28a745';
-        } else {
-          fetchResult.style.color = '#dc3545';
+
+        const text = await resp.text();
+        let data = null;
+        try {
+          data = JSON.parse(text);
+        } catch (err) {
+          // Not JSON — show raw text
+          fetchResult.textContent = 'Response (HTTP ' + resp.status + '):\n\n' + text;
+          fetchResult.style.color = resp.ok ? '#27ae60' : '#c0392b';
+          return;
         }
-      })
-      .catch(function(error) {
-        fetchResult.textContent = 'Error: ' + error.message;
-        fetchResult.style.color = '#dc3545';
-      })
-      .finally(function() {
-        // Re-enable button
+
+        // Show formatted JSON
+        const pretty = JSON.stringify(data, null, 2);
+        fetchResult.textContent = 'Response (HTTP ' + resp.status + '):\n\n' + pretty;
+        // Determine success heuristically: prefer HTTP OK, otherwise look for status/success keys
+        const okFlag = resp.ok || data.status === 'done' || data.success === true || data.status === 'ok';
+        fetchResult.style.color = okFlag ? '#27ae60' : '#c0392b';
+      } catch (error) {
+        console.error('Manual fetch failed', error);
+        fetchResult.textContent = 'Request failed: ' + (error && error.message ? error.message : String(error));
+        fetchResult.style.color = '#c0392b';
+      } finally {
         runFetchBtn.disabled = false;
         runFetchBtn.textContent = 'Run manual fetch';
-      });
+      }
     }
   }
 })();
