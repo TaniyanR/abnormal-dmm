@@ -1,13 +1,15 @@
 /**
- * admin.js
- * JavaScript for admin UI functionality
- * - Manual fetch trigger
+ * public/assets/js/admin.js
+ * Admin UI JavaScript for manual fetch trigger
+ * - Calls window.__ADMIN_UI.fetchEndpoint (fallback /public/api/admin/fetch.php)
+ * - Token priority: manual input -> window.__ADMIN_UI.defaultToken (defaultToken should normally be blank)
+ * - Default payload: { total: 100 } (change to hits/offset if backend expects that)
  */
 
 (function() {
   'use strict';
 
-  // Wait for DOM to be ready
+  // DOM ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
@@ -17,69 +19,89 @@
   function init() {
     const runFetchBtn = document.getElementById('runFetchBtn');
     const fetchResult = document.getElementById('fetchResult');
-    const manualToken = document.getElementById('manualToken');
+    const manualTokenInput = document.getElementById('manualToken');
 
     if (!runFetchBtn || !fetchResult) {
-      return; // Elements not found on this page
+      console.warn('Admin UI elements not found: runFetchBtn or fetchResult missing');
+      return;
     }
 
-    runFetchBtn.addEventListener('click', async function() {
-      const config = window.__ADMIN_UI || {};
-      const endpoint = config.fetchEndpoint || '/public/api/admin/fetch.php';
-      const defaultToken = config.defaultToken || '';
-      const token = manualToken.value.trim() || defaultToken;
+    // Attach handler
+    runFetchBtn.addEventListener('click', handleManualFetch);
+
+    async function handleManualFetch(e) {
+      e && e.preventDefault();
+
+      const cfg = window.__ADMIN_UI || {};
+      const endpoint = cfg.fetchEndpoint || '/public/api/admin/fetch.php';
+      const defaultToken = cfg.defaultToken || '';
+      const manualToken = manualTokenInput ? manualTokenInput.value.trim() : '';
+      const token = manualToken || defaultToken;
 
       if (!token) {
-        fetchResult.textContent = 'Error: ADMIN_TOKEN is required. Please enter it in the field or set it in .env';
-        fetchResult.style.color = '#721c24';
-        fetchResult.style.background = '#f8d7da';
+        fetchResult.textContent = 'Error: No admin token provided. Please enter ADMIN_TOKEN or configure defaultToken.';
+        fetchResult.style.color = '#c0392b';
         return;
       }
 
-      // Disable button and show loading
+      // UI: disable while running
       runFetchBtn.disabled = true;
+      const origLabel = runFetchBtn.textContent;
       runFetchBtn.textContent = 'Running...';
-      fetchResult.textContent = 'Fetching data from DMM API...';
-      fetchResult.style.color = '';
-      fetchResult.style.background = '#f9f9f9';
+      fetchResult.textContent = 'Sending request to ' + endpoint + ' ...';
+      fetchResult.style.color = '#333';
+
+      // Payload: default uses total. Replace with hits/offset if needed by your backend.
+      const payload = {
+        total: 100
+        // hits: 20,
+        // offset: 1
+      };
 
       try {
-        const response = await fetch(endpoint, {
-          method: 'GET',
+        const resp = await fetch(endpoint, {
+          method: 'POST',
           headers: {
-            'Authorization': 'Bearer ' + token,
-            'X-Admin-Token': token
-          }
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(payload)
         });
 
-        const contentType = response.headers.get('content-type');
-        let result;
-        
-        if (contentType && contentType.includes('application/json')) {
-          result = await response.json();
-        } else {
-          result = await response.text();
+        const text = await resp.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (_) {
+          // Not JSON, show raw text
+          fetchResult.textContent = 'Response (HTTP ' + resp.status + '):\n\n' + text;
+          fetchResult.style.color = resp.ok ? '#27ae60' : '#c0392b';
+          return;
         }
 
-        // Display result
-        if (response.ok) {
-          fetchResult.textContent = JSON.stringify(result, null, 2);
-          fetchResult.style.color = '#155724';
-          fetchResult.style.background = '#d4edda';
-        } else {
-          fetchResult.textContent = 'Error (HTTP ' + response.status + '):\n' + JSON.stringify(result, null, 2);
-          fetchResult.style.color = '#721c24';
-          fetchResult.style.background = '#f8d7da';
-        }
-      } catch (error) {
-        fetchResult.textContent = 'Error: ' + error.message;
-        fetchResult.style.color = '#721c24';
-        fetchResult.style.background = '#f8d7da';
+        const pretty = JSON.stringify(data, null, 2);
+        fetchResult.textContent = 'Response (HTTP ' + resp.status + '):\n\n' + pretty;
+
+        const okFlag = resp.ok || data.success === true || data.status === 'done' || data.status === 'ok';
+        fetchResult.style.color = okFlag ? '#27ae60' : '#c0392b';
+      } catch (err) {
+        console.error('Manual fetch failed', err);
+        fetchResult.textContent = 'Request failed: ' + (err && err.message ? err.message : String(err));
+        fetchResult.style.color = '#c0392b';
       } finally {
-        // Re-enable button
         runFetchBtn.disabled = false;
-        runFetchBtn.textContent = 'Run manual fetch';
+        runFetchBtn.textContent = origLabel || 'Run manual fetch';
       }
-    });
+    }
+
+    // Populate manual token with defaultToken if provided (only if field empty)
+    try {
+      const cfg2 = window.__ADMIN_UI || {};
+      if (cfg2.defaultToken && manualTokenInput && !manualTokenInput.value) {
+        manualTokenInput.value = cfg2.defaultToken;
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 })();
