@@ -3,12 +3,14 @@ declare(strict_types=1);
 
 // admin/api_settings.php
 // Merged and conflict-resolved admin UI for API fetch settings.
-// Requires: src/bootstrap.php (sets $config / $pdo or provide DB::init), optional src/DB.php, .env.php (ADMIN_TOKEN)
+// Requires: src/bootstrap.php (should provide $config / $pdo optionally), optional src/DB.php, .env.php (ADMIN_TOKEN)
 
 session_start();
 
+// bootstrap (may set up autoload, $config, etc.)
 require_once __DIR__ . '/../src/bootstrap.php';
-// try to include DB wrapper if exists
+
+// optional DB wrapper
 if (file_exists(__DIR__ . '/../src/DB.php')) {
     require_once __DIR__ . '/../src/DB.php';
 }
@@ -18,19 +20,19 @@ $config = $GLOBALS['config'] ?? (file_exists(__DIR__ . '/../.env.php') ? require
 $pdo = $GLOBALS['pdo'] ?? null;
 
 // If project provides DB class, initialize/get it
-if (class_exists('\\DB') && is_null($pdo)) {
+if (class_exists('\DB') && is_null($pdo)) {
     try {
-        \\DB::init($config);
-        $pdo = \\DB::get();
+        \DB::init($config);
+        $pdo = \DB::get();
     } catch (Throwable $e) {
         // ignore, fallback to $pdo if available
     }
 }
 
-// Helper escape
+// helper
 function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
-// Determine admin token from config/env (do not echo this into page)
+// Determine admin token (do not print it)
 $adminToken = $config['ADMIN_TOKEN'] ?? ($config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: null);
 
 // Read Authorization header (case-insensitive)
@@ -50,7 +52,8 @@ $loggedInAsAdmin = !empty($_SESSION['is_admin']) && $_SESSION['is_admin'] === tr
 // convenience token via query (only for quick manual use; be careful)
 $tokenParam = isset($_GET['token']) ? trim((string)$_GET['token']) : null;
 
-// Validate admin access for viewing: allow if session admin OR Authorization matches OR token param matches OR no adminToken set (development)
+// Validate admin access for viewing:
+// allow if session admin OR Authorization matches OR token param matches OR no adminToken set (dev)
 $canView = false;
 if ($loggedInAsAdmin) $canView = true;
 if (!empty($adminToken) && !empty($authToken) && hash_equals((string)$adminToken, (string)$authToken)) $canView = true;
@@ -63,7 +66,7 @@ if (!$canView) {
     exit;
 }
 
-// Ensure PDO is available for persistent settings; otherwise fallback to file (defensive)
+// Use PDO when available, otherwise fallback to file storage
 $usingDb = ($pdo instanceof PDO);
 
 // Create settings table if using DB
@@ -75,21 +78,21 @@ if ($usingDb) {
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) {
-        // ignore creation error; we'll still attempt selects/inserts later
+        // ignore creation error
     }
 }
 
 // Defaults
 $defaults = [
     'API_RUN_INTERVAL' => '3600',
-    'API_FETCH_COUNT' => '20',
-    'API_FETCH_TOTAL' => '100',
-    'API_SORT' => 'date',
-    'API_GTE_DATE' => '',
-    'API_LTE_DATE' => '',
-    'API_SITE' => 'FANZA',
-    'API_SERVICE' => 'digital',
-    'API_FLOOR' => 'videoa',
+    'API_FETCH_COUNT'  => '20',
+    'API_FETCH_TOTAL'  => '100',
+    'API_SORT'         => 'date',
+    'API_GTE_DATE'     => '',
+    'API_LTE_DATE'     => '',
+    'API_SITE'         => 'FANZA',
+    'API_SERVICE'      => 'digital',
+    'API_FLOOR'        => 'videoa',
 ];
 
 // Load current settings
@@ -106,7 +109,6 @@ if ($usingDb) {
         // ignore
     }
 } else {
-    // fallback file storage
     $settingsFile = __DIR__ . '/../.api_settings.json';
     if (file_exists($settingsFile)) {
         $saved = json_decode((string)@file_get_contents($settingsFile), true);
@@ -136,7 +138,6 @@ $messages = [];
 //  - session is admin
 //  - Authorization Bearer matches adminToken
 //  - POST _token equals session CSRF token
-// Note: if adminToken is set and POST includes plain admin token in _token, we do NOT rely on that to avoid leaking; prefer session or auth header.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postToken = $_POST['_token'] ?? '';
     $authOk = false;
@@ -151,14 +152,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // sanitize & validate inputs
         $new = [];
         $new['API_RUN_INTERVAL'] = (string) (int) ($_POST['API_RUN_INTERVAL'] ?? $defaults['API_RUN_INTERVAL']);
-        $new['API_FETCH_COUNT'] = (string) min(100, max(1, (int)($_POST['API_FETCH_COUNT'] ?? $defaults['API_FETCH_COUNT'])));
-        $new['API_FETCH_TOTAL'] = (string) min(1000, max(1, (int)($_POST['API_FETCH_TOTAL'] ?? $defaults['API_FETCH_TOTAL'])));
-        $new['API_SORT'] = trim((string)($_POST['API_SORT'] ?? $defaults['API_SORT']));
-        $new['API_GTE_DATE'] = trim((string)($_POST['API_GTE_DATE'] ?? ''));
-        $new['API_LTE_DATE'] = trim((string)($_POST['API_LTE_DATE'] ?? ''));
-        $new['API_SITE'] = trim((string)($_POST['API_SITE'] ?? $defaults['API_SITE']));
-        $new['API_SERVICE'] = trim((string)($_POST['API_SERVICE'] ?? $defaults['API_SERVICE']));
-        $new['API_FLOOR'] = trim((string)($_POST['API_FLOOR'] ?? $defaults['API_FLOOR']));
+        $new['API_FETCH_COUNT']  = (string) min(100, max(1, (int)($_POST['API_FETCH_COUNT'] ?? $defaults['API_FETCH_COUNT'])));
+        $new['API_FETCH_TOTAL']  = (string) min(1000, max(1, (int)($_POST['API_FETCH_TOTAL'] ?? $defaults['API_FETCH_TOTAL'])));
+        $new['API_SORT']         = trim((string)($_POST['API_SORT'] ?? $defaults['API_SORT']));
+        $new['API_GTE_DATE']     = trim((string)($_POST['API_GTE_DATE'] ?? ''));
+        $new['API_LTE_DATE']     = trim((string)($_POST['API_LTE_DATE'] ?? ''));
+        $new['API_SITE']         = trim((string)($_POST['API_SITE'] ?? $defaults['API_SITE']));
+        $new['API_SERVICE']      = trim((string)($_POST['API_SERVICE'] ?? $defaults['API_SERVICE']));
+        $new['API_FLOOR']        = trim((string)($_POST['API_FLOOR'] ?? $defaults['API_FLOOR']));
 
         // persist
         if ($usingDb) {

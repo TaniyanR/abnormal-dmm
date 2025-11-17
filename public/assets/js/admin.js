@@ -49,10 +49,12 @@
       fetchResult.textContent = 'Sending request to ' + endpoint + ' ...';
       fetchResult.style.color = '#333';
 
-      // Prepare payload: server accepts { total: N } (also hits/offset may be accepted)
+      // Prepare payload: server accepts { total: N } by default.
+      // If your endpoint expects hits/offset instead, replace or add them.
       const payload = {
         total: 100
-        // hits: 20, offset: 1    // optional: uncomment/adjust if your endpoint expects hits/offset
+        // hits: 20,
+        // offset: 1
       };
 
       try {
