@@ -31,7 +31,6 @@
       e && e.preventDefault();
 
       const config = window.__ADMIN_UI || {};
-      // Default endpoint matches admin UI: /public/api/admin/fetch.php
       const endpoint = config.fetchEndpoint || '/public/api/admin/fetch.php';
       const defaultToken = config.defaultToken || '';
       const manualToken = manualTokenInput ? manualTokenInput.value.trim() : '';
@@ -49,8 +48,7 @@
       fetchResult.textContent = 'Sending request to ' + endpoint + ' ...';
       fetchResult.style.color = '#333';
 
-      // Prepare payload: server accepts { total: N } by default.
-      // If your endpoint expects hits/offset instead, replace or add them.
+      // Default payload: request total items. Adjust if backend expects hits/offset.
       const payload = {
         total: 100
         // hits: 20,
@@ -81,7 +79,8 @@
         // Show formatted JSON
         const pretty = JSON.stringify(data, null, 2);
         fetchResult.textContent = 'Response (HTTP ' + resp.status + '):\n\n' + pretty;
-        // Determine success heuristically: prefer HTTP OK, otherwise look for status/success keys
+
+        // Determine success heuristically
         const okFlag = resp.ok || data.status === 'done' || data.success === true || data.status === 'ok';
         fetchResult.style.color = okFlag ? '#27ae60' : '#c0392b';
       } catch (error) {
@@ -92,6 +91,16 @@
         runFetchBtn.disabled = false;
         runFetchBtn.textContent = 'Run manual fetch';
       }
+    }
+
+    // Populate manual token input if defaultToken is provided via window.__ADMIN_UI (but keep defaultToken empty in UI by default)
+    try {
+      const cfg = window.__ADMIN_UI || {};
+      if (cfg.defaultToken && manualTokenInput && !manualTokenInput.value) {
+        manualTokenInput.value = cfg.defaultToken;
+      }
+    } catch (e) {
+      // ignore
     }
   }
 })();

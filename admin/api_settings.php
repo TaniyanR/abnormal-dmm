@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 // admin/api_settings.php
-// Merged and conflict-resolved admin UI for API fetch settings.
-// Requires: src/bootstrap.php (should provide $config / $pdo optionally), optional src/DB.php, .env.php (ADMIN_TOKEN)
+// Merged, conflict-resolved admin UI for API fetch settings.
+// Requirements: src/bootstrap.php (may provide $config / $pdo), optional src/DB.php, .env.php (ADMIN_TOKEN)
 
 session_start();
 
@@ -32,7 +32,7 @@ if (class_exists('\DB') && is_null($pdo)) {
 // helper
 function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
-// Determine admin token (do not print it)
+// Determine admin token (do NOT echo it)
 $adminToken = $config['ADMIN_TOKEN'] ?? ($config['admin']['token'] ?? getenv('ADMIN_TOKEN') ?: null);
 
 // Read Authorization header (case-insensitive)
