@@ -2,12 +2,12 @@
 declare(strict_types=1);
 
 // admin/api_settings.php
-// Final merged admin UI for DMM API fetch settings.
+// Admin UI for DMM API fetch settings (merged, cleaned).
 // - Loads config / PDO from src/bootstrap.php or optional src/DB.php
 // - Auth: session is_admin OR Authorization: Bearer <ADMIN_TOKEN> OR ?token=<ADMIN_TOKEN> (dev)
-// - Persists to DB table `api_settings` (columns `key`/`value`) when available, otherwise falls back to .api_settings.json
-// - Uses session CSRF token for POSTs
-// - Does NOT expose ADMIN_TOKEN into the page
+// - Persists to DB table `api_settings` using either (`key`,`value`) or legacy (`setting_key`,`setting_value`) schema.
+// - Falls back to .api_settings.json if no DB available.
+// - Uses session CSRF token for POSTs and does NOT expose ADMIN_TOKEN to the page.
 
 session_start();
 
@@ -18,11 +18,11 @@ if (file_exists(__DIR__ . '/../src/DB.php')) {
     require_once __DIR__ . '/../src/DB.php';
 }
 
-// Try to obtain config and pdo from common locations
+// Obtain config / pdo from common places
 $config = $GLOBALS['config'] ?? (file_exists(__DIR__ . '/../.env.php') ? require __DIR__ . '/../.env.php' : []);
 $pdo = $GLOBALS['pdo'] ?? null;
 
-// If project provides DB class, try to initialize it
+// If repository provides DB class, try to init it
 if (class_exists('\DB') && is_null($pdo)) {
     try {
         \DB::init($config);
@@ -49,18 +49,18 @@ if (!empty($headers['Authorization'])) {
     if (preg_match('/Bearer\s+(.*)$/i', $_SERVER['HTTP_AUTHORIZATION'], $m)) $authToken = trim($m[1]);
 }
 
-// session admin flag
+// session admin flag (optional integration)
 $loggedInAsAdmin = !empty($_SESSION['is_admin']) && $_SESSION['is_admin'] === true;
 
-// optional query token for quick access (use with caution!)
+// optional token via query for quick admin access (use with caution)
 $tokenParam = isset($_GET['token']) ? trim((string)$_GET['token']) : null;
 
-// determine view permission
+// Determine if viewer can see page
 $canView = false;
 if ($loggedInAsAdmin) $canView = true;
 if (!empty($adminToken) && !empty($authToken) && hash_equals((string)$adminToken, (string)$authToken)) $canView = true;
 if (!empty($adminToken) && !empty($tokenParam) && hash_equals((string)$adminToken, (string)$tokenParam)) $canView = true;
-if (empty($adminToken)) $canView = true; // dev convenience
+if (empty($adminToken)) $canView = true; // developer convenience when ADMIN_TOKEN not set
 
 if (!$canView) {
     http_response_code(401);
@@ -68,10 +68,10 @@ if (!$canView) {
     exit;
 }
 
-// using DB?
+// Using DB?
 $usingDb = ($pdo instanceof PDO);
 
-// Ensure table exists if using DB (preferred schema: `key`, `value`)
+// Ensure preferred table exists when using DB (best-effort)
 if ($usingDb) {
     try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS `api_settings` (
@@ -80,11 +80,11 @@ if ($usingDb) {
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) {
-        // ignore creation errors; we'll still attempt reads/writes and handle failures gracefully
+        // ignore
     }
 }
 
-// defaults
+// Defaults
 $defaults = [
     'API_RUN_INTERVAL' => '3600',
     'API_FETCH_COUNT'  => '20',
@@ -97,11 +97,10 @@ $defaults = [
     'API_FLOOR'        => 'videoa',
 ];
 
-// load current settings (try both common schemas for compatibility)
+// Load current settings (DB or file fallback). Support both schemas for compatibility.
 $current = [];
 if ($usingDb) {
     try {
-        // try preferred schema first
         $stmt = $pdo->query("SELECT `key`,`value` FROM `api_settings`");
         if ($stmt !== false) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -109,7 +108,7 @@ if ($usingDb) {
             }
         }
     } catch (Throwable $e) {
-        // fallback: older schema naming
+        // try older naming
         try {
             $stmt = $pdo->query("SELECT `setting_key` AS `key`, `setting_value` AS `value` FROM `api_settings`");
             if ($stmt !== false) {
@@ -118,7 +117,7 @@ if ($usingDb) {
                 }
             }
         } catch (Throwable $e2) {
-            // ignore, will fallback to file
+            // ignore and fallback to file
             $current = [];
         }
     }
@@ -130,12 +129,12 @@ if ($usingDb) {
     }
 }
 
-// merge defaults
+// Merge defaults for missing keys
 foreach ($defaults as $k => $v) {
     if (!isset($current[$k])) $current[$k] = $v;
 }
 
-// CSRF token
+// Prepare CSRF token in session
 if (empty($_SESSION['csrf_token'])) {
     try {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
@@ -147,7 +146,7 @@ $csrfToken = $_SESSION['csrf_token'];
 
 $messages = [];
 
-// Handle POST: accept if session admin OR Authorization header matches OR valid CSRF
+// Handle POST (save settings). Allow when session admin, Authorization header matches, or valid CSRF
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postToken = $_POST['_token'] ?? '';
     $authOk = false;
@@ -159,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         http_response_code(403);
         $messages[] = ['type' => 'error', 'text' => 'Forbidden: invalid CSRF/auth'];
     } else {
-        // sanitize & validate
+        // sanitize & validate inputs
         $new = [];
         $new['API_RUN_INTERVAL'] = (string) (int) ($_POST['API_RUN_INTERVAL'] ?? $defaults['API_RUN_INTERVAL']);
         $new['API_FETCH_COUNT']  = (string) min(100, max(1, (int)($_POST['API_FETCH_COUNT'] ?? $defaults['API_FETCH_COUNT'])));
@@ -171,9 +170,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new['API_SERVICE']      = trim((string)($_POST['API_SERVICE'] ?? $defaults['API_SERVICE']));
         $new['API_FLOOR']        = trim((string)($_POST['API_FLOOR'] ?? $defaults['API_FLOOR']));
 
-        // persist
+        // persist to DB or to file
         if ($usingDb) {
-            // try preferred schema writes; if fails attempt older schema
             try {
                 $ins = $pdo->prepare("INSERT INTO `api_settings` (`key`, `value`, `updated_at`) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `updated_at` = NOW()");
                 foreach ($new as $k => $v) {
@@ -182,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $messages[] = ['type' => 'success', 'text' => 'Settings saved to DB (key/value)'];
                 $current = $new;
             } catch (Throwable $e) {
-                // fallback to older schema names
+                // fallback to older schema
                 try {
                     $ins2 = $pdo->prepare("INSERT INTO `api_settings` (`setting_key`, `setting_value`, `updated_at`) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`), `updated_at` = NOW()");
                     foreach ($new as $k => $v) {
@@ -195,7 +193,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } else {
-            // file fallback
             try {
                 $settingsFile = __DIR__ . '/../.api_settings.json';
                 file_put_contents($settingsFile, json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -210,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // HTML output (do NOT expose admin token)
 ?>
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
