@@ -212,6 +212,8 @@ input[type="text"], input[type="number"], select { width:100%; padding:8px 12px;
 .btn { padding:10px 20px; border:none; border-radius:4px; font-weight:600; cursor:pointer; }
 .btn:not(.secondary) { background:#3498db; color:#fff; }
 .btn.secondary { background:#95a5a6; color:#fff; }
+.input.small { max-width:300px; }
+hr { margin:30px 0; border:none; border-top:1px solid #ddd; }
 .status-box { background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px; padding:15px; font-family:monospace; font-size:13px; white-space:pre-wrap; max-height:400px; overflow-y:auto; }
 </style>
 </head>
@@ -281,7 +283,7 @@ input[type="text"], input[type="number"], select { width:100%; padding:8px 12px;
     <div class="actions">
       <button type="submit" class="btn">Save Settings</button>
       <button type="button" id="runFetchBtn" class="btn secondary">Run manual fetch</button>
-      <input type="text" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="small" value="">
+      <input type="text" id="manualToken" placeholder="ADMIN_TOKEN (optional)" class="input small" value="">
     </div>
   </form>
 
