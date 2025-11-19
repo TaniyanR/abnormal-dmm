@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン</title>
+  <link rel="stylesheet" href="assets/css/login.css">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-panel">
+      <h1>ログイン</h1>
+      <form id="loginForm" action="/api/login" method="POST">
+        <div class="form-row">
+          <label for="email">メールアドレス</label>
+          <input type="email" id="email" name="email" autocomplete="email" required>
+          <span class="field-error" id="emailError"></span>
+        </div>
+        <div class="form-row">
+          <label for="password">パスワード</label>
+          <div class="pw-row">
+            <input type="password" id="password" name="password" autocomplete="current-password" required>
+            <button type="button" class="pw-toggle" aria-label="パスワードを表示" aria-pressed="false">👁</button>
+          </div>
+          <span class="field-error" id="passwordError"></span>
+        </div>
+        <div class="form-inline form-row">
+          <label class="checkbox">
+            <input type="checkbox" name="remember"> ログイン状態を保持
+          </label>
+          <a href="/forgot" class="forgot">パスワードを忘れた</a>
+        </div>
+        <div class="form-row">
+          <button type="submit" class="btn primary" id="loginBtn">ログイン</button>
+        </div>
+        <div hidden id="formMessage" style="color:#c0392b;font-size:13px;margin-top:8px;"></div>
+      </form>
+      <div class="oauth-row">
+        <div class="or">または</div>
+        <div class="oauth-buttons">
+          <button type="button" class="btn oauth google">Googleでログイン</button>
+          <button type="button" class="btn oauth twitter">Twitterでログイン</button>
+        </div>
+      </div>
+      <div class="signup-row" style="margin-top:14px;">
+        <span>アカウントをお持ちでない方</span>
+        <a href="/signup" style="color:var(--accent);">新規登録</a>
+      </div>
+    </div>
+  </div>
+  <script src="assets/js/login.js"></script>
+</body>
+</html>

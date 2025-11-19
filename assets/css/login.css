@@ -1,0 +1,45 @@
+:root{
+  --bg:#f7fafc;
+  --panel:#ffffff;
+  --accent:#ff6600;
+  --text:#0f1724;
+  --muted:#6b7280;
+  --max-width:420px;
+  --radius:10px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;color:var(--text);background:var(--bg)}
+.login-page{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
+.login-panel{background:var(--panel);width:100%;max-width:var(--max-width);border-radius:var(--radius);box-shadow:0 10px 30px rgba(16,24,40,0.06);padding:28px}
+.login-panel h1{margin:0 0 18px;font-size:20px}
+.form-row{margin-bottom:14px}
+label{display:block;margin-bottom:6px;font-weight:600;font-size:13px}
+input[type="email"], input[type="password"]{
+  width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(15,23,36,0.08);font-size:14px;background:#fff;
+}
+.pw-row{display:flex;gap:8px;align-items:center}
+.pw-row .pw-toggle{background:transparent;border:0;padding:6px 8px;border-radius:6px;cursor:pointer}
+.form-inline{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.checkbox input{margin-right:8px}
+.forgot{font-size:13px;color:var(--muted);text-decoration:none}
+.forgot:hover{text-decoration:underline}
+.btn{display:inline-block;padding:10px 14px;border-radius:8px;border:0;background:#ddd;color:#fff;cursor:pointer;text-decoration:none}
+.btn.primary{background:var(--accent);color:#fff;font-weight:700;width:100%}
+.oauth-row .or{text-align:center;color:var(--muted);font-size:13px;margin:8px 0}
+.oauth-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.btn.oauth{padding:8px 10px;background:#f1f5f9;color:var(--text);border:1px solid rgba(15,23,36,0.04)}
+.btn.google{background:#fff;color:#000}
+.btn.twitter{background:#e8f5fe;color:#0b6aa8}
+
+/* エラーメッセージ */
+.field-error{display:block;color:#c0392b;font-size:13px;min-height:18px}
+
+/* サイト全体の small 調整 */
+.signup-row{font-size:14px;color:var(--muted);display:flex;gap:8px;align-items:center}
+
+/* レスポンシブ */
+@media (max-width:420px){
+  .login-panel{padding:18px;border-radius:8px}
+  input[type="email"], input[type="password"]{font-size:13px;padding:9px}
+}
