@@ -1,0 +1,123 @@
+:root{
+  --header-height:56px;
+  --menu-height:48px; /* main-menu の高さ想定 */
+  --footer-height:64px;
+  --bg:#ffffff;
+  --accent:#ff6600;
+  --text:#0f1724;
+  --muted:#6b7280;
+  --frame-color:#e9dfe5; /* ヘッダー/サイド/フッターの色 */
+  --side-width:260px;
+}
+
+/* base */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+
+/* visually hidden for accessibility */
+.visually-hidden{position:absolute !important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* header */
+.site-header{background:var(--frame-color);padding:12px 0;box-sizing:border-box;border-bottom:2px solid #000}
+.site-header .container{width:100%;max-width:100%;margin:0;padding:0 15px;display:flex;align-items:center;justify-content:space-between;height:var(--header-height)}
+.brand{
+  font-weight:800;
+  font-size:27px; /* 1.5倍に拡大 */
+  text-decoration:none;
+  color:var(--text);
+}
+.header-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+.affiliate-inline{font-size:12px;color:var(--muted);white-space:nowrap;margin-right:8px}
+
+/* search */
+.search{display:flex;align-items:center;gap:8px}
+.search input{padding:6px 8px;border-radius:6px;border:1px solid rgba(0,0,0,0.08);min-width:160px;font-size:14px}
+.search-btn{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:6px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-weight:700;font-size:14px}
+.search-btn:hover{opacity:0.95}
+.search-btn:focus{outline:3px solid rgba(0,102,204,0.18)}
+
+/* main-menu (full width) */
+/* 下ボーダーを 2px の黒に。 */
+.main-menu{background:#f2f2f2;border-bottom:2px solid #000;width:100%}
+.main-menu .inner{width:100%;max-width:100%;margin:0;padding:6px 16px;height:var(--menu-height);box-sizing:border-box;display:flex;align-items:center}
+.menu-list{display:flex;gap:0;padding:0;margin:0;list-style:none;white-space:nowrap;align-items:center}
+
+/* メニュー項目間に 2px の縦ボーダーを入れる（視覚的区切り） */
+.menu-list li{padding:0;margin:0;display:flex;align-items:center}
+.menu-list li + li{
+  border-left:2px solid #000;
+  margin-left:10px;
+  padding-left:12px; /* ボーダーとテキストの距離 */
+}
+
+.menu-item a{display:inline-block;padding:8px 10px;color:var(--text);text-decoration:none;font-weight:700;border-radius:6px}
+.menu-item a:hover,.menu-item a:focus{background:rgba(0,0,0,0.04);color:var(--accent)}
+
+/* submenu */
+.menu-item.has-sub{position:relative}
+.submenu{position:absolute;left:0;top:100%;margin-top:8px;background:#fff;border:1px solid rgba(0,0,0,0.08);box-shadow:0 8px 20px rgba(16,24,40,0.06);border-radius:8px;padding:8px 0;display:none;min-width:200px;z-index:200}
+.submenu li{padding:0}
+.submenu li a{display:block;padding:8px 14px;color:var(--text);font-weight:600}
+.menu-item.has-sub:hover > .submenu,
+.menu-item.has-sub:focus-within > .submenu{display:block}
+
+/* page container full-width */
+.page-container{width:100%;max-width:100%;margin:0;padding:0}
+
+/* layout: ensure sidebar stretches from under menu to above footer */
+/* 上部余白を削除して menu 下にぴったり接続させる */
+.container.layout{
+  width:100%;
+  max-width:100%;
+  margin:0 auto;
+  padding:0 16px; /* 上の余白を削除（menu の直下に接するため） */
+  box-sizing:border-box;
+  /* ビュー高から header+menu+footer を引いた高さを確保（最小値） */
+  min-height:calc(100vh - var(--header-height) - var(--menu-height) - var(--footer-height));
+  display:grid;
+  grid-template-columns:var(--side-width) 1fr;
+  gap:20px;
+  align-items:start;
+}
+
+/* sidebar: make it fill the available area */
+/* 固定 height をやめ、min-height を確保してページ全体が伸びるようにする（内部スクロールをしない） */
+.sidebar{
+  background:var(--frame-color);
+  padding:20px 12px;
+  width:var(--side-width);
+  /* 自動で伸びる（内部スクロールをやめる） */
+  height:auto;
+  min-height:calc(100vh - var(--header-height) - var(--menu-height) - var(--footer-height));
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  overflow:visible; /* 内部スクロールをやめる */
+}
+.side-nav h3{margin:0 0 8px}
+.side-nav ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.side-nav a{text-decoration:none;color:var(--text);padding:8px;border-radius:6px;display:block}
+.side-nav a:hover{background:rgba(0,0,0,0.04);color:var(--accent)}
+.ad-box{background:#fff;border-radius:6px;border:1px solid rgba(0,0,0,0.04);padding:12px}
+
+/* main content */
+.main{min-height:360px;padding:6px 12px;background:transparent}
+
+/* footer */
+.site-footer{background:var(--frame-color);padding:12px 0;border-top:2px solid #000;box-sizing:border-box}
+.footer-inner{width:100%;max-width:100%;margin:0;padding:0 15px;display:flex;justify-content:space-between;align-items:center;height:var(--footer-height)}
+.footer-left{display:flex;align-items:center;padding-left:15px}
+.footer-right{color:var(--muted);padding-right:15px}
+
+/* small screens: 高さ固定を解除して自然フローに戻す */
+@media (max-width:900px){
+  :root{--side-width:100%}
+  .container.layout{grid-template-columns:1fr;min-height:auto;padding:12px}
+  .sidebar{order:2;width:100%;height:auto;min-height:0}
+  .main{order:1}
+  .menu-list{flex-wrap:wrap}
+  .submenu{position:static;box-shadow:none;border:none;background:transparent;padding:0;display:none}
+  .menu-item.has-sub:focus-within > .submenu,.menu-item.has-sub:hover > .submenu{display:block}
+}

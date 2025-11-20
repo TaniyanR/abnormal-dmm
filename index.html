@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ホームページ - タイトル</title>
+  <link rel="stylesheet" href="assets/css/homepage.css">
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container">
+      <a href="/" class="brand">タイトル</a>
+      <div class="header-right">
+        <span class="affiliate-inline">※アフィリエイト広告を利用しています</span>
+        <form class="search" role="search" aria-label="サイト内検索">
+          <input type="search" placeholder="検索..." aria-label="検索キーワード">
+          <button type="submit" class="search-btn">検索</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <nav class="main-menu" role="navigation" aria-label="メインメニュー">
+    <div class="inner">
+      <ul class="menu-list">
+        <li class="menu-item"><a href="/">ホーム</a></li>
+        <li class="menu-item has-sub">
+          <a href="/category/" aria-haspopup="true" aria-expanded="false">カテゴリ</a>
+          <ul class="submenu">
+            <li><a href="/category/cat1/">カテゴリ1</a></li>
+            <li><a href="/category/cat2/">カテゴリ2</a></li>
+            <li><a href="/category/cat3/">カテゴリ3</a></li>
+          </ul>
+        </li>
+        <li class="menu-item"><a href="/about/">このサイトについて</a></li>
+        <li class="menu-item"><a href="/contact/">お問い合わせ</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="page-container">
+    <div class="container layout">
+      <aside class="sidebar" role="complementary" aria-label="サイドバー">
+        <nav class="side-nav" aria-label="サイドナビゲーション">
+          <h3>メニュー</h3>
+          <ul>
+            <li><a href="/page1/">ページ1</a></li>
+            <li><a href="/page2/">ページ2</a></li>
+            <li><a href="/page3/">ページ3</a></li>
+            <li><a href="/page4/">ページ4</a></li>
+          </ul>
+        </nav>
+        <div class="ad-box" aria-label="広告">
+          <p>広告エリア</p>
+        </div>
+      </aside>
+
+      <main class="main" role="main" aria-label="メインコンテンツ">
+        <h1>ホームページ</h1>
+        <p>ここにメインコンテンツが表示されます。</p>
+        <p>サイドバーは左側に固定され、メニューの下からフッターの上まで伸びます。</p>
+      </main>
+    </div>
+  </div>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="footer-inner" data-first-year="2023" data-last-year="2024">
+      <div class="footer-left">
+        <span id="siteCopyright"></span>
+      </div>
+      <div class="footer-right">
+        <a href="/privacy/">プライバシーポリシー</a> | <a href="/terms/">利用規約</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/js/homepage-mock.js"></script>
+
+</body>
+</html>
