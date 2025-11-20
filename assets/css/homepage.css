@@ -89,7 +89,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-s
   width:var(--side-width);
   /* 自動で伸びる（内部スクロールをやめる） */
   height:auto;
-  min-height: calc(100vh - var(--header-height) - var(--menu-height) - var(--footer-height));
+  min-height:calc(100vh - var(--header-height) - var(--menu-height) - var(--footer-height));
   box-sizing:border-box;
   display:flex;
   flex-direction:column;

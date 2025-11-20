@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', function () {
         else out = `©${f}－${l} タイトル`;
       } else if (f && !l) {
         // first only -> range to current year
-        if (f == String(nowYear)) out = `©${f} タイトル`;
+        if (parseInt(f, 10) === nowYear) out = `©${f} タイトル`;
         else out = `©${f}－${nowYear} タイトル`;
       } else {
         out = `©${nowYear} タイトル`;
