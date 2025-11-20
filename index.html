@@ -1,81 +1,50 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ホームページ - タイトル</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>管理画面 — 共通レイアウト</title>
   <link rel="stylesheet" href="assets/css/homepage.css">
 </head>
 <body>
+  <div class="page">
+    <header class="site-header" role="banner">
+      <div class="header-inner">
+        <div class="header-left" role="navigation" aria-label="サイトタイトルと操作">
+          <a class="brand" href="/">サイト名</a>
 
-  <header class="site-header">
-    <div class="container">
-      <a href="/" class="brand">タイトル</a>
-      <div class="header-right">
-        <span class="affiliate-inline">※アフィリエイト広告を利用しています</span>
-        <form class="search" role="search" aria-label="サイト内検索">
-          <input type="search" placeholder="検索..." aria-label="検索キーワード">
-          <button type="submit" class="search-btn">検索</button>
-        </form>
+          <!-- プレビューはリンク（アイコン + ラベル） -->
+          <a href="#" class="preview-link" role="link" aria-label="プレビューを表示" title="プレビュー">
+            <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M12 5c-7 0-11 6.5-11 7s4 7 11 7 11-6.5 11-7-4-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/>
+              <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+            </svg>
+            <span class="preview-label">プレビュー</span>
+          </a>
+        </div>
+
+        <div class="header-right" aria-live="polite">
+          <span class="login-status">ログイン中</span>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <nav class="main-menu" role="navigation" aria-label="メインメニュー">
-    <div class="inner">
-      <ul class="menu-list">
-        <li class="menu-item"><a href="/">ホーム</a></li>
-        <li class="menu-item has-sub">
-          <a href="/category/" aria-haspopup="true" aria-expanded="false">カテゴリ</a>
-          <ul class="submenu">
-            <li><a href="/category/cat1/">カテゴリ1</a></li>
-            <li><a href="/category/cat2/">カテゴリ2</a></li>
-            <li><a href="/category/cat3/">カテゴリ3</a></li>
-          </ul>
-        </li>
-        <li class="menu-item"><a href="/about/">このサイトについて</a></li>
-        <li class="menu-item"><a href="/contact/">お問い合わせ</a></li>
-      </ul>
-    </div>
-  </nav>
-
-  <div class="page-container">
-    <div class="container layout">
-      <aside class="sidebar" role="complementary" aria-label="サイドバー">
-        <nav class="side-nav" aria-label="サイドナビゲーション">
-          <h3>メニュー</h3>
-          <ul>
-            <li><a href="/page1/">ページ1</a></li>
-            <li><a href="/page2/">ページ2</a></li>
-            <li><a href="/page3/">ページ3</a></li>
-            <li><a href="/page4/">ページ4</a></li>
+    <div class="content" role="main">
+      <aside class="sidebar" aria-label="サイドバー">
+        <nav class="side-nav" aria-label="固定リンク">
+          <h3>サイド</h3>
+          <ul id="fixedLinks">
+            <!-- 固定リンク -->
           </ul>
         </nav>
-        <div class="ad-box" aria-label="広告">
-          <p>広告エリア</p>
-        </div>
       </aside>
 
-      <main class="main" role="main" aria-label="メインコンテンツ">
-        <h1>ホームページ</h1>
-        <p>ここにメインコンテンツが表示されます。</p>
-        <p>サイドバーは左側に固定され、メニューの下からフッターの上まで伸びます。</p>
+      <main class="main" id="mainContent" aria-label="メインコンテンツ">
+        <!-- コンテンツをここに差し替え -->
       </main>
     </div>
   </div>
 
-  <footer class="site-footer" role="contentinfo">
-    <div class="footer-inner" data-first-year="2023" data-last-year="2024">
-      <div class="footer-left">
-        <span id="siteCopyright"></span>
-      </div>
-      <div class="footer-right">
-        <a href="/privacy/">プライバシーポリシー</a> | <a href="/terms/">利用規約</a>
-      </div>
-    </div>
-  </footer>
-
   <script src="assets/js/homepage-mock.js"></script>
-
 </body>
 </html>
