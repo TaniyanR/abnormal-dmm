@@ -31,7 +31,7 @@ jobs:
           mkdir -p thirdparty/thk-analytics
           unzip -q thk-analytics-124.zip -d thirdparty/thk-analytics-temp
           # If zip contains a root directory, move its contents up
-          shopt -s nullglob
+          shopt -s nullglob dotglob
           count=$(ls -A thirdparty/thk-analytics-temp | wc -l)
           if [ "$count" -eq 1 ] ; then
             item=$(ls -A thirdparty/thk-analytics-temp)
@@ -43,6 +43,7 @@ jobs:
           else
             mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics || true
           fi
+          shopt -u dotglob nullglob
           rm -rf thirdparty/thk-analytics-temp
 
       - name: Backup originals
@@ -68,7 +69,7 @@ jobs:
               if head -n 1 "$file" | grep -q '^<?php'; then
                 sed -i '1 a // TODO: mysql_* usage detected - please replace with PDO/mysqli' "$file" || true
               else
-                printf "<?php\n// TODO: mysql_* usage detected - please replace with PDO/mysqli\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
+                { printf "<?php\n// TODO: mysql_* usage detected - please replace with PDO/mysqli\n"; cat "$file"; } > "$file.tmp" && mv "$file.tmp" "$file" || true
               fi
             fi
           done

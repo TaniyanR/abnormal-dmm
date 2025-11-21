@@ -18,6 +18,7 @@ elif [[ -f "$SRC_ARCHIVE" ]]; then
   echo "Extracting $SRC_ARCHIVE to $WORK_DIR"
   unzip -q "$SRC_ARCHIVE" -d "$WORK_DIR-tmp"
   # Move contents properly
+  shopt -s dotglob nullglob
   count=$(ls -A "$WORK_DIR-tmp" | wc -l)
   if [ "$count" -eq 1 ] ; then
     item=$(ls -A "$WORK_DIR-tmp")
@@ -29,6 +30,7 @@ elif [[ -f "$SRC_ARCHIVE" ]]; then
   else
     mv "$WORK_DIR-tmp"/* "$WORK_DIR" || true
   fi
+  shopt -u dotglob nullglob
   rm -rf "$WORK_DIR-tmp"
 else
   echo "No THK source found. Place thk-analytics-124.zip next to this script or set THK_SRC_DIR to a directory with the THK source." >&2
@@ -46,9 +48,7 @@ echo "Backed up files to $BACKUP_DIR"
 
 # 1) Neutralize admin token checks conservatively
 find "$WORK_DIR" -type f -name '*.php' | while read -r file; do
-  sed -i.bak -E 's/ADMIN_TOKEN/true \/\* ADMIN_TOKEN removed by integration \/\*/g' "$file" || true
-  sed -i.bak -E "s/\$_POST\['token'\]\s*!==\s*ADMIN_TOKEN/true \/\* token check removed \/\*/g" "$file" || true
-  rm -f "$file.bak"
+  sed -i -E 's/ADMIN_TOKEN/true \/\* ADMIN_TOKEN removed by integration \/\*/g; s/\$_POST\['"'"'token'"'"'\]\s*!==\s*ADMIN_TOKEN/true \/\* token check removed \/\*/g' "$file" || true
 done
 
 # 2) Remove copyright / credit lines in views
@@ -64,7 +64,7 @@ find "$WORK_DIR" -type f -name '*.php' | while read -r file; do
     if head -n 1 "$file" | grep -q '^<?php'; then
       sed -i '1 a // TODO: mysql_* usage detected — please replace with PDO/mysqli' "$file" || true
     else
-      printf "<?php\n// TODO: mysql_* usage detected — please replace with PDO/mysqli\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
+      { printf "<?php\n// TODO: mysql_* usage detected — please replace with PDO/mysqli\n"; cat "$file"; } > "$file.tmp" && mv "$file.tmp" "$file" || true
     fi
   fi
 done
