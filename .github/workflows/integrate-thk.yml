@@ -57,7 +57,7 @@ jobs:
 
       - name: Remove Copyright lines
         run: |
-          find thirdparty/thk-analytics -type f \( -name '*.html' -o -name '*.php' \) -print0 | xargs -0 sed -i -E '/Copyright/Id; /THK Analytics/Id; /Thought is free/Id; /WEB SERVICE BY DMM.com/Id' || true
+          find thirdparty/thk-analytics -type f \( -name '*.html' -o -name '*.php' \) -print0 | xargs -0 sed -i '/Copyright/d; /THK Analytics/d; /Thought is free/d; /WEB SERVICE BY DMM.com/d' || true
 
       - name: Add TODO for mysql_* usage
         run: |
@@ -68,7 +68,7 @@ jobs:
               if head -n 1 "$file" | grep -q '^<?php'; then
                 sed -i '1 a // TODO: mysql_* usage detected - please replace with PDO/mysqli' "$file" || true
               else
-                printf "<?php // TODO: mysql_* usage detected - please replace with PDO/mysqli ?>\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
+                printf "<?php\n// TODO: mysql_* usage detected - please replace with PDO/mysqli\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
               fi
             fi
           done

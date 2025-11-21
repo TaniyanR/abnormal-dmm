@@ -53,7 +53,7 @@ done
 
 # 2) Remove copyright / credit lines in views
 find "$WORK_DIR" -type f \( -name '*.html' -o -name '*.php' \) | while read -r file; do
-  sed -i -E '/Copyright/Id; /THK Analytics/Id; /Thought is free/Id; /WEB SERVICE BY DMM.com/Id' "$file" || true
+  sed -i '/Copyright/d; /THK Analytics/d; /Thought is free/d; /WEB SERVICE BY DMM.com/d' "$file" || true
 done
 
 # 3) Add TODO comment where mysql_ functions are used
@@ -64,7 +64,7 @@ find "$WORK_DIR" -type f -name '*.php' | while read -r file; do
     if head -n 1 "$file" | grep -q '^<?php'; then
       sed -i '1 a // TODO: mysql_* usage detected — please replace with PDO/mysqli' "$file" || true
     else
-      sed -i "1i<?php // TODO: mysql_* usage detected — please replace with PDO/mysqli ?>" "$file" || true
+      printf "<?php\n// TODO: mysql_* usage detected — please replace with PDO/mysqli\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
     fi
   fi
 done
