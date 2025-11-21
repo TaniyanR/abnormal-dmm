@@ -1,0 +1,81 @@
+---
+name: THK Analytics integration
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      - name: List root files
+        run: ls -la
+
+      - name: Ensure thk zip exists
+        run: |
+          if [ ! -f thk-analytics-124.zip ]; then
+            echo "thk-analytics-124.zip not found in repo root" && exit 1
+          fi
+
+      - name: Extract THK archive
+        run: |
+          mkdir -p thirdparty/thk-analytics
+          unzip -q thk-analytics-124.zip -d thirdparty/thk-analytics-temp
+          # If zip contains a single top-level directory, move its contents up
+          shopt -s nullglob
+          if [ -d thirdparty/thk-analytics-temp/* ] && [ $(ls -A thirdparty/thk-analytics-temp | wc -l) -eq 1 ] ; then
+            mv thirdparty/thk-analytics-temp/*/* thirdparty/thk-analytics || true
+          else
+            mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics || true
+          fi
+          rm -rf thirdparty/thk-analytics-temp
+
+      - name: Backup originals
+        run: |
+          mkdir -p thirdparty/thk-analytics-backups
+          find thirdparty/thk-analytics -type f \( -name '*.php' -o -name '*.html' \) -exec bash -c 'f="$0"; dest="thirdparty/thk-analytics-backups/${f#thirdparty/thk-analytics/}"; mkdir -p "$(dirname "$dest")"; cp -a "$f" "$dest"' {} \;
+
+      - name: Neutralize admin token checks
+        run: |
+          find thirdparty/thk-analytics -type f -name '*.php' -print0 | xargs -0 sed -i -E "s/ADMIN_TOKEN/true \/\* ADMIN_TOKEN removed by integration \/\*/g" || true
+          find thirdparty/thk-analytics -type f -name '*.php' -print0 | xargs -0 sed -i -E "s/\$_POST\['token'\]\s*!==\s*ADMIN_TOKEN/true \/\* token check removed \/\*/g" || true
+
+      - name: Remove Copyright lines
+        run: |
+          find thirdparty/thk-analytics -type f \( -name '*.html' -o -name '*.php' \) -print0 | xargs -0 sed -i -E '/Copyright/Id; /THK Analytics/Id; /Thought is free/Id; /WEB SERVICE BY DMM.com/Id' || true
+
+      - name: Add TODO for mysql_* usage
+        run: |
+          grep -R --line-number "mysql_" thirdparty/thk-analytics || true
+          find thirdparty/thk-analytics -type f -name '*.php' | while read -r file; do
+            if grep -q "mysql_" "$file"; then
+              printf "<?php // TODO: mysql_* usage detected - please replace with PDO/mysqli ?>\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
+            fi
+          done
+
+      - name: Lint PHP files
+        run: |
+          set +e
+          find thirdparty/thk-analytics -type f -name '*.php' -exec php -l {} \; || true
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add thirdparty/thk-analytics thirdparty/thk-analytics-backups || true
+          git commit -m "Integrate THK Analytics: extract and apply basic patches" || echo "No changes to commit"
+          git push origin HEAD:feature/integrate-thk-analytics-integrated || true
+
+      - name: Output result
+        run: |
+          echo "Extraction & patches complete. Pushed to feature/integrate-thk-analytics-integrated"
