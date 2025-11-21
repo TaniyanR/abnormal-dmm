@@ -41,10 +41,10 @@ shopt -s nullglob dotglob
 TEMP_CONTENTS=(thirdparty/thk-analytics-temp/*)
 if [ ${#TEMP_CONTENTS[@]} -eq 1 ] && [ -d "${TEMP_CONTENTS[0]}" ]; then
     echo -e "${YELLOW}Moving nested directory contents...${NC}"
-    mv "${TEMP_CONTENTS[0]}"/* thirdparty/thk-analytics/ || true
+    find "${TEMP_CONTENTS[0]}" -mindepth 1 -maxdepth 1 -exec mv -t thirdparty/thk-analytics/ {} + || true
 else
     echo -e "${YELLOW}Moving archive contents...${NC}"
-    mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics/ || true
+    find thirdparty/thk-analytics-temp -mindepth 1 -maxdepth 1 -exec mv -t thirdparty/thk-analytics/ {} + || true
 fi
 
 # Cleanup temp directory
@@ -118,26 +118,23 @@ fi
 # Lint PHP files
 echo -e "${YELLOW}Linting PHP files...${NC}"
 set +e  # Don't exit on lint errors
-LINT_ERROR_FILE=$(mktemp)
-echo "0" > "$LINT_ERROR_FILE"
+HAS_LINT_ERRORS=false
 
-find thirdparty/thk-analytics -type f -name '*.php' | while read -r file; do
+while IFS= read -r file; do
     if ! php -l "$file" > /dev/null 2>&1; then
         echo -e "${RED}  Syntax error in: $file${NC}"
         php -l "$file"
-        echo "1" > "$LINT_ERROR_FILE"
+        HAS_LINT_ERRORS=true
     fi
-done
+done < <(find thirdparty/thk-analytics -type f -name '*.php')
 
 set -e
 
-if [ "$(cat "$LINT_ERROR_FILE")" -eq 0 ]; then
+if [ "$HAS_LINT_ERRORS" = false ]; then
     echo -e "${GREEN}✓ All PHP files passed syntax check${NC}"
 else
     echo -e "${YELLOW}⚠ Some PHP files have syntax errors (see above)${NC}"
 fi
-
-rm -f "$LINT_ERROR_FILE"
 
 # Summary
 echo -e "\n${GREEN}=== Integration Complete ===${NC}"
