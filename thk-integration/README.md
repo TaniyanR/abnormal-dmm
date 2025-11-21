@@ -117,13 +117,21 @@ Check for hardcoded values that need configuration:
 
 ### 7. Security Audit
 
-The automated patches neutralize admin token checks. **This is intentional for integration testing but requires proper implementation**:
+The automated patches neutralize admin token checks. **This is intentional for integration testing only and creates a security vulnerability that MUST be addressed before production use**:
 
-- Implement proper authentication/authorization
+**CRITICAL - Admin Token Neutralization:**
+- The integration replaces `ADMIN_TOKEN` checks with `true /* ADMIN_TOKEN removed by integration */`
+- This allows the code to run without authentication for initial testing
+- **You MUST implement proper authentication before deploying to any environment**
+
+**Required Security Actions:**
+- Implement proper authentication/authorization system
+- Review all neutralized token checks and restore proper validation
 - Review session management
 - Audit SQL queries for injection vulnerabilities
 - Check file upload/download security
 - Validate all user inputs
+- Consider using established authentication frameworks (e.g., Laravel's auth, Symfony Security)
 
 ### 8. Documentation
 

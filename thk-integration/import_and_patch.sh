@@ -85,7 +85,13 @@ if [ -n "$MYSQL_FILES" ]; then
     echo -e "${YELLOW}  - Adding TODO comments for mysql_* usage...${NC}"
     find thirdparty/thk-analytics -type f -name '*.php' | while read -r file; do
         if grep -q "mysql_" "$file"; then
-            printf "<?php // TODO: mysql_* usage detected - please replace with PDO/mysqli ?>\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
+            # Only add TODO if file doesn't already start with <?php
+            if ! head -n 1 "$file" | grep -q "^<?php"; then
+                printf "<?php // TODO: mysql_* usage detected - please replace with PDO/mysqli ?>\n" | cat - "$file" > "$file.new" && mv "$file.new" "$file" || true
+            else
+                # Insert TODO after the opening PHP tag
+                sed -i '1 a // TODO: mysql_* usage detected - please replace with PDO/mysqli' "$file" || true
+            fi
         fi
     done
 else
@@ -103,7 +109,7 @@ if [ ! -f "thirdparty/thk-analytics/composer.json" ]; then
     "description": "THK Analytics integration for abnormal-dmm",
     "type": "library",
     "require": {
-        "php": ">=7.0"
+        "php": ">=8.0"
     },
     "autoload": {
         "psr-4": {
