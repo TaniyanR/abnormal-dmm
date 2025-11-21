@@ -18,8 +18,14 @@ elif [[ -f "$SRC_ARCHIVE" ]]; then
   echo "Extracting $SRC_ARCHIVE to $WORK_DIR"
   unzip -q "$SRC_ARCHIVE" -d "$WORK_DIR-tmp"
   # Move contents properly
-  if [ $(ls -A "$WORK_DIR-tmp" | wc -l) -eq 1 ] ; then
-    mv "$WORK_DIR-tmp"/*/* "$WORK_DIR" || true
+  count=$(ls -A "$WORK_DIR-tmp" | wc -l)
+  if [ "$count" -eq 1 ] ; then
+    item=$(ls -A "$WORK_DIR-tmp")
+    if [ -d "$WORK_DIR-tmp/$item" ]; then
+      mv "$WORK_DIR-tmp/$item"/* "$WORK_DIR" || true
+    else
+      mv "$WORK_DIR-tmp"/* "$WORK_DIR" || true
+    fi
   else
     mv "$WORK_DIR-tmp"/* "$WORK_DIR" || true
   fi
@@ -54,7 +60,12 @@ done
 find "$WORK_DIR" -type f -name '*.php' | while read -r file; do
   if grep -q "mysql_" "$file" ; then
     echo "Found mysql_ usage in $file — adding TODO comment"
-    sed -i "1i<?php // TODO: mysql_* usage detected — please replace with PDO/mysqli ?>" "$file" || true
+    # Insert comment after the opening PHP tag if it exists, or at the beginning
+    if head -n 1 "$file" | grep -q '^<?php'; then
+      sed -i '1 a // TODO: mysql_* usage detected — please replace with PDO/mysqli' "$file" || true
+    else
+      sed -i "1i<?php // TODO: mysql_* usage detected — please replace with PDO/mysqli ?>" "$file" || true
+    fi
   fi
 done
 
