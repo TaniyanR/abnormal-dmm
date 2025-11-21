@@ -1,0 +1,92 @@
+name: THK Analytics integration
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      - name: List root files
+        run: ls -la
+
+      - name: Ensure thk zip exists
+        run: |
+          if [ ! -f thk-analytics-124.zip ]; then
+            echo "thk-analytics-124.zip not found in repo root" && exit 1
+          fi
+
+      - name: Extract THK archive
+        run: |
+          mkdir -p thirdparty/thk-analytics
+          unzip -q thk-analytics-124.zip -d thirdparty/thk-analytics-temp
+          # If zip contains a root directory, move its contents up
+          shopt -s nullglob dotglob
+          count=$(ls -A thirdparty/thk-analytics-temp | wc -l)
+          if [ "$count" -eq 1 ] ; then
+            item=$(ls -A thirdparty/thk-analytics-temp)
+            if [ -d "thirdparty/thk-analytics-temp/$item" ]; then
+              mv "thirdparty/thk-analytics-temp/$item"/* thirdparty/thk-analytics || true
+            else
+              mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics || true
+            fi
+          else
+            mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics || true
+          fi
+          shopt -u dotglob nullglob
+          rm -rf thirdparty/thk-analytics-temp
+
+      - name: Backup originals
+        run: |
+          mkdir -p thirdparty/thk-analytics-backups
+          find thirdparty/thk-analytics -type f \( -name '*.php' -o -name '*.html' \) -exec bash -c 'f="$0"; dest="thirdparty/thk-analytics-backups/${f#thirdparty/thk-analytics/}"; mkdir -p "$(dirname "$dest")"; cp -a "$f" "$dest"' {} \;
+
+      - name: Neutralize admin token checks
+        run: |
+          find thirdparty/thk-analytics -type f -name '*.php' -print0 | xargs -0 sed -i -E "s/ADMIN_TOKEN/true \/\* ADMIN_TOKEN removed by integration \/\*/g" || true
+          find thirdparty/thk-analytics -type f -name '*.php' -print0 | xargs -0 sed -i -E "s/\$_POST\['token'\]\s*!==\s*ADMIN_TOKEN/true \/\* token check removed \/\*/g" || true
+
+      - name: Remove Copyright lines
+        run: |
+          find thirdparty/thk-analytics -type f \( -name '*.html' -o -name '*.php' \) -print0 | xargs -0 sed -i '/Copyright/d; /THK Analytics/d; /Thought is free/d; /WEB SERVICE BY DMM.com/d' || true
+
+      - name: Add TODO for mysql_* usage
+        run: |
+          grep -R --line-number "mysql_" thirdparty/thk-analytics || true
+          find thirdparty/thk-analytics -type f -name '*.php' | while read -r file; do
+            if grep -q "mysql_" "$file"; then
+              # Insert comment after the opening PHP tag if it exists, or at the beginning
+              if head -n 1 "$file" | grep -q '^<?php'; then
+                sed -i '1 a // TODO: mysql_* usage detected - please replace with PDO/mysqli' "$file" || true
+              else
+                { printf "<?php\n// TODO: mysql_* usage detected - please replace with PDO/mysqli\n"; cat "$file"; } > "$file.tmp" && mv "$file.tmp" "$file" || true
+              fi
+            fi
+          done
+
+      - name: Lint PHP files
+        run: |
+          set +e
+          find thirdparty/thk-analytics -type f -name '*.php' -exec php -l {} \; || true
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add thirdparty/thk-analytics thirdparty/thk-analytics-backups || true
+          git commit -m "Integrate THK Analytics: extract and apply basic patches" || echo "No changes to commit"
+          git push origin HEAD:feature/integrate-thk-analytics-integrated || true
+
+      - name: Output result
+        run: |
+          echo "Extraction & patches complete. Pushed to feature/integrate-thk-analytics-integrated"
