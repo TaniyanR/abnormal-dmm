@@ -37,10 +37,11 @@ echo -e "${YELLOW}Extracting THK Analytics archive...${NC}"
 unzip -q thk-analytics-124.zip -d thirdparty/thk-analytics-temp
 
 # If zip contains a single top-level directory, move its contents up
-shopt -s nullglob
-if [ -d thirdparty/thk-analytics-temp/* ] && [ $(ls -A thirdparty/thk-analytics-temp | wc -l) -eq 1 ] ; then
+shopt -s nullglob dotglob
+TEMP_CONTENTS=(thirdparty/thk-analytics-temp/*)
+if [ ${#TEMP_CONTENTS[@]} -eq 1 ] && [ -d "${TEMP_CONTENTS[0]}" ]; then
     echo -e "${YELLOW}Moving nested directory contents...${NC}"
-    mv thirdparty/thk-analytics-temp/*/* thirdparty/thk-analytics/ || true
+    mv "${TEMP_CONTENTS[0]}"/* thirdparty/thk-analytics/ || true
 else
     echo -e "${YELLOW}Moving archive contents...${NC}"
     mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics/ || true
@@ -117,23 +118,26 @@ fi
 # Lint PHP files
 echo -e "${YELLOW}Linting PHP files...${NC}"
 set +e  # Don't exit on lint errors
-LINT_ERRORS=0
+LINT_ERROR_FILE=$(mktemp)
+echo "0" > "$LINT_ERROR_FILE"
 
 find thirdparty/thk-analytics -type f -name '*.php' | while read -r file; do
     if ! php -l "$file" > /dev/null 2>&1; then
         echo -e "${RED}  Syntax error in: $file${NC}"
         php -l "$file"
-        LINT_ERRORS=$((LINT_ERRORS + 1))
+        echo "1" > "$LINT_ERROR_FILE"
     fi
 done
 
 set -e
 
-if [ $LINT_ERRORS -eq 0 ]; then
+if [ "$(cat "$LINT_ERROR_FILE")" -eq 0 ]; then
     echo -e "${GREEN}✓ All PHP files passed syntax check${NC}"
 else
     echo -e "${YELLOW}⚠ Some PHP files have syntax errors (see above)${NC}"
 fi
+
+rm -f "$LINT_ERROR_FILE"
 
 # Summary
 echo -e "\n${GREEN}=== Integration Complete ===${NC}"

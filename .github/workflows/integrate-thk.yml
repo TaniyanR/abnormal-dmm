@@ -31,11 +31,12 @@ jobs:
           mkdir -p thirdparty/thk-analytics
           unzip -q thk-analytics-124.zip -d thirdparty/thk-analytics-temp
           # If zip contains a single top-level directory, move its contents up
-          shopt -s nullglob
-          if [ -d thirdparty/thk-analytics-temp/* ] && [ $(ls -A thirdparty/thk-analytics-temp | wc -l) -eq 1 ] ; then
-            mv thirdparty/thk-analytics-temp/*/* thirdparty/thk-analytics || true
+          shopt -s nullglob dotglob
+          TEMP_CONTENTS=(thirdparty/thk-analytics-temp/*)
+          if [ ${#TEMP_CONTENTS[@]} -eq 1 ] && [ -d "${TEMP_CONTENTS[0]}" ]; then
+            mv "${TEMP_CONTENTS[0]}"/* thirdparty/thk-analytics/ || true
           else
-            mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics || true
+            mv thirdparty/thk-analytics-temp/* thirdparty/thk-analytics/ || true
           fi
           rm -rf thirdparty/thk-analytics-temp
 
