@@ -10,7 +10,7 @@ This directory contains a small plan and an automated helper script to integrate
 
 ## Important notes
 - This script is a best-effort helper. Because THK Analytics was provided externally (not in this repo), you'll need to place the THK Analytics source code archive (zip or tar) next to this script, or point the script to where the files live.
-- The script will NOT automatically enable or wire up application-specific routes — it will import files, remove login &amp; copyright strings, and run PHP-compatibility replacements.
+- The script will NOT automatically enable or wire up application-specific routes — it will import files, remove login & copyright strings, and run PHP-compatibility replacements.
 - Always review the changes and run the app in a development environment (Docker) before deploying to production.
 
 ## Usage

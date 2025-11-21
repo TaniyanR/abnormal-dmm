@@ -59,12 +59,12 @@ done
 # 3) Add TODO comment where mysql_ functions are used
 find "$WORK_DIR" -type f -name '*.php' | while read -r file; do
   if grep -q "mysql_" "$file" ; then
-    echo "Found mysql_ usage in $file — adding TODO comment"
+    echo "Found mysql_ usage in $file - adding TODO comment"
     # Insert comment after the opening PHP tag if it exists, or at the beginning
     if head -n 1 "$file" | grep -q '^<?php'; then
-      sed -i '1 a // TODO: mysql_* usage detected — please replace with PDO/mysqli' "$file" || true
+      sed -i '1 a // TODO: mysql_* usage detected - please replace with PDO/mysqli' "$file" || true
     else
-      { printf "<?php\n// TODO: mysql_* usage detected — please replace with PDO/mysqli\n"; cat "$file"; } > "$file.tmp" && mv "$file.tmp" "$file" || true
+      { printf "<?php\n// TODO: mysql_* usage detected - please replace with PDO/mysqli\n"; cat "$file"; } > "$file.tmp" && mv "$file.tmp" "$file" || true
     fi
   fi
 done
