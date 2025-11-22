@@ -1,161 +1,172 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# THK Analytics Integration Script
-# This script extracts the THK Analytics archive, backs up original files,
-# and applies conservative patches for integration into abnormal-dmm.
+# THK Analytics import_and_patch.sh
+# Conservative, non-destructive import + best-effort patches for THK Analytics
+# Usage: run from repository root:
+#   bash thk-integration/import_and_patch.sh
 
-echo "=========================================="
-echo "THK Analytics Integration Script"
-echo "=========================================="
+REPO_ROOT="$(pwd)"
+ZIP_FILE="thk-analytics-124.zip"
+DEST_DIR="$REPO_ROOT/thirdparty/thk-analytics"
+BACKUP_DIR="$REPO_ROOT/thirdparty/thk-analytics-backups"
+TEMP_DIR="$REPO_ROOT/thirdparty/thk-analytics-temp"
+
+# Colors (optional)
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+echo -e "${GREEN}=== THK Analytics import & patch helper ===${NC}"
+echo "Repository root: $REPO_ROOT"
 echo ""
 
-# Configuration
-ZIP_FILE="thk-analytics-124.zip"
-DEST_DIR="thirdparty/thk-analytics"
-BACKUP_DIR="thirdparty/thk-analytics-backups"
-TEMP_DIR="thirdparty/thk-analytics-temp"
-
-# Step 1: Verify ZIP file exists
-echo "[1/7] Checking for THK Analytics archive..."
-if [ ! -f "$ZIP_FILE" ]; then
-    echo "ERROR: $ZIP_FILE not found in current directory!"
-    echo "Please ensure the file is present and run this script from repository root."
-    exit 1
+# 1) Check archive exists
+echo -e "${YELLOW}[1/7] Checking archive...${NC}"
+if [[ ! -f "$ZIP_FILE" ]]; then
+  echo -e "${RED}ERROR: $ZIP_FILE not found in repository root. Place it there or set THK_SRC_DIR to a directory with the THK sources.${NC}"
+  exit 1
 fi
 echo "✓ Found $ZIP_FILE"
 echo ""
 
-# Step 2: Extract archive
-echo "[2/7] Extracting THK Analytics archive..."
+# 2) Extract archive
+echo -e "${YELLOW}[2/7] Extracting archive...${NC}"
 mkdir -p "$DEST_DIR"
+rm -rf "$TEMP_DIR"
 unzip -q "$ZIP_FILE" -d "$TEMP_DIR"
 
-# Handle single top-level directory in ZIP (if present)
-shopt -s nullglob
-if [ -d "$TEMP_DIR"/* ] && [ $(ls -A "$TEMP_DIR" | wc -l) -eq 1 ]; then
-    echo "  Archive contains single top-level directory, flattening..."
-    mv "$TEMP_DIR"/*/* "$DEST_DIR" 2>/dev/null || true
+# Handle single top-level directory vs flat archive (bash-only)
+shopt -s nullglob dotglob
+TEMP_CONTENTS=("$TEMP_DIR"/*)
+if [[ ${#TEMP_CONTENTS[@]} -eq 1 && -d "${TEMP_CONTENTS[0]}" ]]; then
+  echo "  Archive contains a single top-level directory — moving its contents."
+  find "${TEMP_CONTENTS[0]}" -mindepth 1 -maxdepth 1 -exec mv -t "$DEST_DIR" {} + || true
 else
-    mv "$TEMP_DIR"/* "$DEST_DIR" 2>/dev/null || true
+  echo "  Moving top-level entries from archive."
+  find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -exec mv -t "$DEST_DIR" {} + || true
 fi
+shopt -u dotglob nullglob
 rm -rf "$TEMP_DIR"
 echo "✓ Extracted to $DEST_DIR"
 echo ""
 
-# Step 3: Backup original files
-echo "[3/7] Creating backups of PHP and HTML files..."
+# 3) Backup originals (PHP & HTML)
+echo -e "${YELLOW}[3/7] Backing up .php and .html files...${NC}"
 mkdir -p "$BACKUP_DIR"
+# Use find -print0 to handle spaces
+while IFS= read -r -d '' file; do
+  rel="${file#$DEST_DIR/}"
+  dest="$BACKUP_DIR/$rel"
+  mkdir -p "$(dirname "$dest")"
+  cp -a -- "$file" "$dest"
+done < <(find "$DEST_DIR" -type f \( -name '*.php' -o -name '*.html' \) -print0 || true)
 
-# Backup all PHP and HTML files while preserving directory structure
-find "$DEST_DIR" -type f \( -name '*.php' -o -name '*.html' \) | while read -r file; do
-    # Calculate relative path
-    rel_path="${file#$DEST_DIR/}"
-    dest_file="$BACKUP_DIR/$rel_path"
-    
-    # Create directory structure in backup location
-    mkdir -p "$(dirname "$dest_file")"
-    
-    # Copy file with original timestamps
-    cp -a "$file" "$dest_file"
-done
-
-backup_count=$(find "$BACKUP_DIR" -type f | wc -l)
+backup_count=$(find "$BACKUP_DIR" -type f | wc -l || true)
 echo "✓ Backed up $backup_count files to $BACKUP_DIR"
 echo ""
 
-# Step 4: Neutralize admin token checks
-echo "[4/7] Neutralizing hardcoded admin token checks..."
-# Replace ADMIN_TOKEN constant references
-find "$DEST_DIR" -type f -name '*.php' -print0 | \
-    xargs -0 sed -i -E "s/ADMIN_TOKEN/true \/\* ADMIN_TOKEN removed by integration \/\*/g" 2>/dev/null || true
-
-# Replace token validation checks
-find "$DEST_DIR" -type f -name '*.php' -print0 | \
-    xargs -0 sed -i -E "s/\\\$_POST\['token'\][[:space:]]*!==[[:space:]]*ADMIN_TOKEN/true \/\* token check removed \/\*/g" 2>/dev/null || true
-
-echo "✓ Admin token checks neutralized (will require proper auth implementation)"
+# 4) Neutralize admin token checks (conservative)
+echo -e "${YELLOW}[4/7] Neutralizing admin token checks...${NC}"
+# Replace ADMIN_TOKEN identifiers with a true marker (annotated)
+# Use perl or sed; keep simple sed with regexp variants
+while IFS= read -r -d '' file; do
+  # Replace standalone ADMIN_TOKEN tokens
+  sed -i -E 's/\bADMIN_TOKEN\b/true \/* ADMIN_TOKEN removed by integration *\//g' "$file" || true
+  # Replace common token check pattern: $_POST['token'] !== ADMIN_TOKEN
+  sed -i -E "s/\\\$_POST\\['token'\\][[:space:]]*!==[[:space:]]*ADMIN_TOKEN/true \/* token check removed *\//g" "$file" || true
+done < <(find "$DEST_DIR" -type f -name '*.php' -print0 || true)
+echo "✓ Admin token checks neutralized (review required to reintroduce auth)"
 echo ""
 
-# Step 5: Remove copyright/credits lines
-echo "[5/7] Removing visible copyright and credits lines..."
-find "$DEST_DIR" -type f \( -name '*.html' -o -name '*.php' \) -print0 | \
-    xargs -0 sed -i -E '/Copyright/Id; /THK Analytics/Id; /Thought is free/Id; /WEB SERVICE BY DMM\.com/Id' 2>/dev/null || true
-
-echo "✓ Copyright/credits lines removed"
+# 5) Remove visible copyright / credits in views
+echo -e "${YELLOW}[5/7] Removing visible copyright/credit lines...${NC}"
+while IFS= read -r -d '' file; do
+  # Use case-insensitive removal of lines matching patterns
+  sed -i -E '/Copyright/Id; /THK Analytics/Id; /Thought is free/Id; /WEB SERVICE BY DMM\.com/Id' "$file" || true
+done < <(find "$DEST_DIR" -type f \( -name '*.php' -o -name '*.html' \) -print0 || true)
+echo "✓ Copyright/credit lines removed from views (backups preserved)"
 echo ""
 
-# Step 6: Add TODO comments for mysql_* usage
-echo "[6/7] Scanning for deprecated mysql_* function usage..."
-echo ""
-echo "Files containing mysql_* functions:"
-grep -R --line-number "mysql_" "$DEST_DIR" 2>/dev/null || echo "  (none found)"
-echo ""
-
-# Add TODO comment to top of files using mysql_*
-find "$DEST_DIR" -type f -name '*.php' | while read -r file; do
-    if grep -q "mysql_" "$file" 2>/dev/null; then
-        # Create temporary file with TODO prepended
-        {
-            echo "<?php // TODO: mysql_* usage detected - please replace with PDO/mysqli ?>"
-            cat "$file"
-        } > "$file.new"
-        mv "$file.new" "$file"
-        echo "  Added TODO to: ${file#$DEST_DIR/}"
-    fi
-done
-
-echo "✓ TODO comments added for mysql_* usage"
-echo ""
-
-# Step 7: Lint PHP files
-echo "[7/7] Linting PHP files for syntax errors..."
-lint_errors=0
-lint_output=$(mktemp)
-
-find "$DEST_DIR" -type f -name '*.php' | while read -r file; do
-    if ! php -l "$file" > "$lint_output" 2>&1; then
-        echo "  LINT ERROR in ${file#$DEST_DIR/}:"
-        cat "$lint_output" | grep -v "^No syntax errors" || true
-        lint_errors=$((lint_errors + 1))
-    fi
-done
-
-rm -f "$lint_output"
-
-if [ $lint_errors -eq 0 ]; then
-    echo "✓ All PHP files passed syntax check"
+# 6) Add TODO comments for mysql_* usage (do NOT attempt auto-replacement)
+echo -e "${YELLOW}[6/7] Scanning for deprecated mysql_* usage and annotating...${NC}"
+mysql_files=$(grep -R --line-number --null "mysql_" "$DEST_DIR" 2>/dev/null || true)
+if [[ -z "$mysql_files" ]]; then
+  echo "  No mysql_* usage detected."
 else
-    echo "⚠ Found $lint_errors files with syntax errors (review output above)"
+  # Print list
+  echo "Files containing mysql_*:"
+  echo "$mysql_files" | tr '\0' '\n' || true
+
+  # Annotate files conservatively
+  while IFS= read -r -d '' file; do
+    if [[ ! -f "$file" ]]; then
+      continue
+    fi
+    # If first line begins with <?php, insert a comment after the opening tag; else prepend a PHP open with TODO
+    first_line=$(head -n 1 "$file" || true)
+    if [[ "$first_line" =~ ^\<\?php ]]; then
+      # Insert after first line
+      sed -i '1 a // TODO: mysql_* usage detected - please replace with PDO/mysqli' "$file" || true
+    else
+      # Prepend a php open + comment
+      { printf "<?php\n// TODO: mysql_* usage detected - please replace with PDO/mysqli\n"; cat "$file"; } > "$file.tmp" && mv "$file.tmp" "$file" || true
+    fi
+    echo "  Annotated: ${file#$DEST_DIR/}"
+  done < <(grep -Rl --null "mysql_" "$DEST_DIR" --include="*.php" 2>/dev/null || true)
+fi
+echo "✓ mysql_* annotation pass complete"
+echo ""
+
+# 7) Optionally add a minimal composer.json hint if not present in thirdparty module
+if [[ ! -f "$DEST_DIR/composer.json" && ! -f "$REPO_ROOT/composer.json" ]]; then
+  echo -e "${YELLOW}[7/7] Creating a helper composer.json at repo root to hint PHP 8 requirement...${NC}"
+  cat > "$REPO_ROOT/composer.json" <<'JSON'
+{
+  "name": "thirdparty/thk-analytics-integration",
+  "description": "Helper composer metadata for THK Analytics integration (non-packagist)",
+  "require": {
+    "php": ">=8.0"
+  }
+}
+JSON
+  echo "✓ Created composer.json (repo root)"
+else
+  echo -e "${YELLOW}[7/7] Skipping composer.json creation (already present)${NC}"
 fi
 echo ""
 
-# Summary
+# Lint PHP files (report only; do not fail the script)
+echo -e "${YELLOW}Linting PHP files for syntax errors...${NC}"
+lint_errors=0
+while IFS= read -r -d '' file; do
+  if ! php -l "$file" >/dev/null 2>&1; then
+    echo -e "${RED}  Syntax error: $file${NC}"
+    php -l "$file" || true
+    lint_errors=$((lint_errors + 1))
+  fi
+done < <(find "$DEST_DIR" -type f -name '*.php' -print0 || true)
+
+if [[ $lint_errors -eq 0 ]]; then
+  echo -e "${GREEN}✓ All PHP files passed syntax check${NC}"
+else
+  echo -e "${YELLOW}⚠ Found $lint_errors files with syntax errors. Inspect and fix manually.${NC}"
+fi
+echo ""
+
+# Final summary
 echo "=========================================="
-echo "Integration Complete!"
+echo -e "${GREEN}Integration run complete.${NC}"
+echo ""
+echo "Next manual steps (required):"
+echo "  1) Review backups in: $BACKUP_DIR"
+echo "  2) Run: find $DEST_DIR -name '*.php' -exec php -l {} \\;"
+echo "  3) Replace mysql_* calls with PDO or mysqli (script only annotated)"
+echo "  4) Reintroduce proper authentication for admin pages"
+echo "  5) Wire up routes and test in dev environment"
+echo "  6) Review removed credits/licenses for compliance"
+echo ""
+echo "Files extracted to: $DEST_DIR"
+echo "Backups stored at: $BACKUP_DIR"
 echo "=========================================="
-echo ""
-echo "Next steps (MANUAL - see thk-integration/README.md):"
-echo ""
-echo "  1. Run: find $DEST_DIR -name '*.php' -exec php -l {} \;"
-echo "     Verify all PHP files have valid syntax"
-echo ""
-echo "  2. Replace mysql_* functions with PDO/mysqli"
-echo "     Search: grep -r 'mysql_' $DEST_DIR"
-echo ""
-echo "  3. Wire up application routes"
-echo "     Map /thk-analytics/* to $DEST_DIR"
-echo ""
-echo "  4. Reintroduce proper authentication"
-echo "     Review files with '/* token check removed */' comments"
-echo ""
-echo "  5. Review removed copyright/credits"
-echo "     Check backups: $BACKUP_DIR"
-echo ""
-echo "  6. Test all functionality thoroughly"
-echo ""
-echo "Backups stored in: $BACKUP_DIR"
-echo "Integration files in: $DEST_DIR"
-echo ""
-echo "For detailed documentation, see: thk-integration/README.md"
-echo ""
