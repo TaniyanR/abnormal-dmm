@@ -1,155 +1,189 @@
-# THK Analytics Integration
+#!/usr/bin/env bash
+set -euo pipefail
 
-## Overview
+# THK Analytics import_and_patch.sh
+# Conservative, non-destructive import + annotated patches for THK Analytics
+# Usage (from repo root):
+#   bash thk-integration/import_and_patch.sh
+#
+# Behavior:
+# - If THK_SRC_DIR env var points to a directory, it copies from there.
+# - Otherwise expects thk-analytics-124.zip at repo root and extracts it.
+# - Creates backups of .php/.html files under thirdparty/thk-analytics-backups/.
+# - Neutralizes ADMIN_TOKEN/token checks (annotated) for review only.
+# - Removes visible copyright/credit lines from views (patterns only).
+# - Adds TODO annotations for files using mysql_* (does NOT auto-convert).
+# - Runs php -l on discovered PHP files and reports errors (does not fail the whole run).
 
-This directory contains tools and documentation for integrating the THK Analytics package (thk-analytics-124.zip) into the abnormal-dmm project. The approach is conservative and non-destructive: the automation creates backups of original files and applies only reversible, annotated changes to make the code easier to review and adapt to PHP 8+.
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WORK_DIR="$REPO_ROOT/thirdparty/thk-analytics"
+BACKUP_DIR="$REPO_ROOT/thirdparty/thk-analytics-backups"
+TMP_DIR="$REPO_ROOT/thirdparty/thk-analytics-tmp"
+ZIP_NAME="thk-analytics-124.zip"
+SRC_DIR_ENV=${THK_SRC_DIR:-}
 
-## Integration Plan
+# Optional colored output if terminal supports it
+if [ -t 1 ]; then
+  GREEN=$'\033[0;32m'
+  YELLOW=$'\033[1;33m'
+  RED=$'\033[0;31m'
+  NC=$'\033[0m'
+else
+  GREEN=""
+  YELLOW=""
+  RED=""
+  NC=""
+fi
 
-The integration follows a conservative, non-destructive approach:
+echo "${GREEN}=== THK Analytics import & patch helper ===${NC}"
+echo "Repository root: $REPO_ROOT"
+echo ""
 
-1. Extract the THK Analytics ZIP archive to `thirdparty/thk-analytics`.
-2. Backup original PHP and HTML files to `thirdparty/thk-analytics-backups`.
-3. Apply conservative automated patches:
-   - Neutralize `ADMIN_TOKEN` checks (replace with annotated `true` to allow review; you must reintroduce proper auth).
-   - Remove visible copyright/credit lines (patterns: "Copyright", "THK Analytics", "Thought is free", "WEB SERVICE BY DMM.com") from views only.
-   - Add TODO comments for deprecated `mysql_*` function usage (script only annotates; no automatic DB-layer rewrite).
-4. Lint PHP files to detect syntax errors (`php -l`).
-5. Commit results to version control (automation pushes to `feature/integrate-thk-analytics-integrated` by default).
+# Prepare directories
+mkdir -p "$WORK_DIR"
+mkdir -p "$BACKUP_DIR"
 
-## Usage
+# 1) Obtain source (THK_SRC_DIR or zip)
+if [[ -n "$SRC_DIR_ENV" && -d "$SRC_DIR_ENV" ]]; then
+  echo "${YELLOW}Copying THK source from THK_SRC_DIR=$SRC_DIR_ENV ...${NC}"
+  rsync -a --exclude '.git' --delete "$SRC_DIR_ENV"/ "$WORK_DIR"/
+elif [[ -f "$REPO_ROOT/$ZIP_NAME" ]]; then
+  echo "${YELLOW}Extracting $ZIP_NAME ...${NC}"
+  rm -rf "$TMP_DIR"
+  mkdir -p "$TMP_DIR"
+  unzip -q "$REPO_ROOT/$ZIP_NAME" -d "$TMP_DIR"
+  # Handle single top-level directory vs flat archive
+  shopt -s nullglob dotglob
+  TEMP_CONTENTS=("$TMP_DIR"/*)
+  if [[ ${#TEMP_CONTENTS[@]} -eq 1 && -d "${TEMP_CONTENTS[0]}" ]]; then
+    # move nested contents
+    find "${TEMP_CONTENTS[0]}" -mindepth 1 -maxdepth 1 -exec mv -t "$WORK_DIR" {} + || true
+  else
+    # move top-level entries
+    find "$TMP_DIR" -mindepth 1 -maxdepth 1 -exec mv -t "$WORK_DIR" {} + || true
+  fi
+  shopt -u dotglob nullglob
+  rm -rf "$TMP_DIR"
+else
+  echo "${RED}ERROR: No THK source found. Place $ZIP_NAME at repo root or set THK_SRC_DIR to a directory with the THK source.${NC}"
+  exit 1
+fi
 
-Two ways to run the integration: GitHub Actions (recommended for reproducibility) or the local script for manual testing.
+echo "${GREEN}✓ THK sources are in $WORK_DIR${NC}"
+echo ""
 
-### Option 1 — GitHub Actions (recommended)
+# 2) Backup .php and .html files (preserve structure)
+echo "${YELLOW}[Backup] Creating backups of .php and .html files...${NC}"
+while IFS= read -r -d '' file; do
+  rel="${file#$WORK_DIR/}"
+  dest="$BACKUP_DIR/$rel"
+  mkdir -p "$(dirname "$dest")"
+  cp -a -- "$file" "$dest"
+done < <(find "$WORK_DIR" -type f \( -name '*.php' -o -name '*.html' \) -print0 || true)
+backup_count=$(find "$BACKUP_DIR" -type f | wc -l || true)
+echo "${GREEN}✓ Backed up $backup_count files to $BACKUP_DIR${NC}"
+echo ""
 
-A workflow is provided at `.github/workflows/integrate-thk.yml` and is triggerable via `workflow_dispatch`.
+# 3) Neutralize admin token checks (conservative, annotated)
+echo "${YELLOW}[Patch] Neutralizing ADMIN_TOKEN/token checks (annotated)...${NC}"
+while IFS= read -r -d '' file; do
+  # Replace standalone ADMIN_TOKEN tokens (word-boundary) with annotated true
+  sed -i -E 's/\bADMIN_TOKEN\b/true \/* ADMIN_TOKEN removed by integration *\//g' "$file" || true
+  # Replace common token validation patterns like $_POST['token'] !== ADMIN_TOKEN
+  sed -i -E "s/\\\$_POST\\['token'\\][[:space:]]*!==[[:space:]]*ADMIN_TOKEN/true \/* token check removed *\//g" "$file" || true
+done < <(find "$WORK_DIR" -type f -name '*.php' -print0 || true)
+echo "${GREEN}✓ Admin token checks annotated (search for 'token check removed' or 'ADMIN_TOKEN removed')${NC}"
+echo ""
 
-To run:
-1. Go to the repository on GitHub → Actions.
-2. Select "THK Analytics integration".
-3. Click "Run workflow" and pick the branch to run from (e.g., `feature/integrate-thk-analytics`).
-4. The workflow will:
-   - Extract `thk-analytics-124.zip` (must be present at repo root).
-   - Create backups under `thirdparty/thk-analytics-backups/`.
-   - Apply conservative patches and annotations.
-   - Run `php -l` for syntax checks.
-   - Commit and push the results to `feature/integrate-thk-analytics-integrated`.
+# 4) Remove visible copyright/credit lines (views only)
+echo "${YELLOW}[Patch] Removing visible copyright/credit lines in views...${NC}"
+while IFS= read -r -d '' file; do
+  sed -i -E '/Copyright/Id; /THK Analytics/Id; /Thought is free/Id; /WEB SERVICE BY DMM\.com/Id' "$file" || true
+done < <(find "$WORK_DIR" -type f \( -name '*.php' -o -name '*.html' \) -print0 || true)
+echo "${GREEN}✓ Copyright/credit patterns removed from views (backups preserved)${NC}"
+echo ""
 
-### Option 2 — Manual (local)
+# 5) Annotate files using mysql_* (do NOT auto-replace)
+echo "${YELLOW}[Scan] Searching for deprecated mysql_* usage...${NC}"
+mysql_found=false
+while IFS= read -r -d '' file; do
+  mysql_found=true
+  echo "  - ${file#$WORK_DIR/}"
+done < <(grep -Rl --null "mysql_" "$WORK_DIR" --include="*.php" 2>/dev/null || true)
 
-For local testing or controlled manual runs:
+if [[ "$mysql_found" = true ]]; then
+  echo ""
+  echo "${YELLOW}[Patch] Adding TODO annotations for mysql_* usage...${NC}"
+  while IFS= read -r -d '' file; do
+    # If file already contains our TODO marker, skip
+    if grep -q "TODO: mysql_* usage detected" "$file" 2>/dev/null; then
+      continue
+    fi
+    first_line=$(head -n 1 "$file" || true)
+    if [[ "$first_line" =~ ^\<\?php ]]; then
+      # Insert a comment after the opening PHP tag (line 1)
+      sed -i '1 a // TODO: mysql_* usage detected - please replace with PDO/mysqli' "$file" || true
+    else
+      # Prepend a PHP open tag + TODO comment
+      { printf "<?php\n// TODO: mysql_* usage detected - please replace with PDO/mysqli\n"; cat "$file"; } > "$file.tmp" && mv "$file.tmp" "$file" || true
+    fi
+    echo "  Annotated: ${file#$WORK_DIR/}"
+  done < <(grep -Rl --null "mysql_" "$WORK_DIR" --include="*.php" 2>/dev/null || true)
+else
+  echo "${GREEN}✓ No mysql_* usage detected${NC}"
+fi
+echo ""
 
-1. Place `thk-analytics-124.zip` at the repository root (or set the environment variable `THK_SRC_DIR` to point to a directory containing the THK sources).
-2. From the repository root, run:
-   ```bash
-   bash thk-integration/import_and_patch.sh
-   ```
-3. Inspect backups and the modified files under `thirdparty/thk-analytics/` before committing.
+# 6) Optionally add a minimal composer.json at repo root (hint only) if none exists
+if [[ ! -f "$REPO_ROOT/composer.json" ]]; then
+  echo "${YELLOW}[Hint] Creating minimal composer.json at repo root to indicate PHP requirement...${NC}"
+  cat > "$REPO_ROOT/composer.json" <<'JSON'
+{
+  "name": "thirdparty/thk-analytics-integration",
+  "description": "Helper composer metadata for THK Analytics integration (non-packagist)",
+  "require": {
+    "php": ">=8.0"
+  }
+}
+JSON
+  echo "${GREEN}✓ Created composer.json (repo root)${NC}"
+else
+  echo "${YELLOW}[Hint] composer.json already present at repo root — skipping${NC}"
+fi
+echo ""
 
-Prerequisites:
-- Bash (Linux/macOS or WSL/Git Bash on Windows)
-- `unzip`
-- PHP CLI (for linting)
-- `thk-analytics-124.zip` (or THK source dir)
+# 7) Lint PHP files (report only)
+echo "${YELLOW}[Lint] Running php -l on PHP files (report only)...${NC}"
+set +e
+lint_errors=0
+while IFS= read -r -d '' file; do
+  if ! php -l "$file" >/dev/null 2>&1; then
+    echo "${RED}Syntax error: $file${NC}"
+    php -l "$file" || true
+    lint_errors=$((lint_errors + 1))
+  fi
+done < <(find "$WORK_DIR" -type f -name '*.php' -print0 || true)
+set -e
 
-## What the automation does
+if [[ $lint_errors -eq 0 ]]; then
+  echo "${GREEN}✓ All PHP files passed syntax check${NC}"
+else
+  echo "${YELLOW}⚠ Found $lint_errors files with syntax errors. Please inspect and fix manually.${NC}"
+fi
+echo ""
 
-- Extracts archive into `thirdparty/thk-analytics/`, handling both flat and single-directory ZIPs.
-- Copies all `.php` and `.html` files to `thirdparty/thk-analytics-backups/` (preserving structure).
-- Neutralizes obvious `ADMIN_TOKEN`/token checks with annotated replacements to allow review (these must be re-secured manually).
-- Removes visible copyright/credit lines from templates/views (does not remove license files).
-- Adds TODO comments for files using `mysql_*` functions; it does not attempt automatic conversion.
-- Runs `php -l` on PHP files and reports syntax issues (does not fail the entire run).
-- Optionally adds a minimal `composer.json` hint if none is present, to indicate PHP 8.0+.
-
-## Manual follow-ups (required)
-
-After running the automation, the following manual tasks are mandatory before any production use:
-
-1. PHP syntax & lint
-   ```bash
-   find thirdparty/thk-analytics -name '*.php' -exec php -l {} \;
-   ```
-   Fix any syntax errors reported (some may have existed in original code).
-
-2. Replace `mysql_*` functions
-   - Search:
-     ```bash
-     grep -R "mysql_" thirdparty/thk-analytics || true
-     ```
-   - Migrate to PDO (recommended) or `mysqli`. Do not leave deprecated calls in production.
-
-3. Reintroduce proper authentication
-   - Search for markers (e.g., `/* token check removed */` or other annotations) and restore authentication using your application's auth system.
-   - Options: session-based auth, JWT, or integrate with existing admin panel auth.
-
-4. Wire up routes/endpoints
-   - Integrate THK entry points into application routing.
-   - Map URLs (e.g., `/thk-analytics/*`) to files under `thirdparty/thk-analytics/` as desired.
-
-5. Review removed credits & license obligations
-   - Ensure license attributions are preserved if legally required.
-   - Backups are available under `thirdparty/thk-analytics-backups/`.
-
-6. Security audit & testing
-   - Audit SQL queries for injection vulnerabilities (especially after `mysql_*` migration).
-   - Check for XSS and unsafe file operations.
-   - Test all features in a development environment.
-
-## File layout after integration (expected)
-
-```
-abnormal-dmm/
-├── thk-analytics-124.zip
-├── thirdparty/
-│   ├── thk-analytics/                 # Extracted and patched THK Analytics
-│   └── thk-analytics-backups/         # Backups of original PHP/HTML files
-├── thk-integration/
-│   ├── README.md                      # This file
-│   └── import_and_patch.sh            # Helper script
-└── .github/
-    └── workflows/
-        └── integrate-thk.yml
-```
-
-## Rollback
-
-To revert to originals:
-```bash
-rm -rf thirdparty/thk-analytics
-cp -a thirdparty/thk-analytics-backups/* thirdparty/thk-analytics/
-# or re-extract original:
-unzip thk-analytics-124.zip -d thirdparty/thk-analytics
-```
-
-## Troubleshooting
-
-- "Ensure thk zip exists" failure:
-  - Confirm `thk-analytics-124.zip` is at repository root and readable.
-
-- PHP lint errors:
-  - Compare with backups to determine whether errors were pre-existing.
-  - Fix syntax issues before functional testing.
-
-- Permission issues extracting files:
-  - Ensure the runner or local user has write permissions to `thirdparty/`.
-
-- mysql_* still failing:
-  - Ensure appropriate PHP extensions (`mysqli`, `pdo_mysql`) are available, but prefer migrating to PDO/mysqli APIs.
-
-## Contributing / Updating this integration
-
-- Test changes locally with `import_and_patch.sh` before updating the workflow.
-- Keep patches conservative and non-destructive — always create backups.
-- Document any new automated patches in this README.
-
-## Support & License
-
-- THK Analytics may have separate license terms—review the original archive and backups for details.
-- For integration tooling issues: open an issue in this repository.
-- For THK Analytics functional issues: refer to THK documentation.
-
-## Next steps (suggested)
-- Run the import locally first, review diffs, then commit to `feature/integrate-thk-analytics-integrated`.
-- Perform mysql_* migrations and restore proper authentication before any staging/production tests.
+# Final summary
+echo "=========================================="
+echo "${GREEN}Integration run complete.${NC}"
+echo ""
+echo "Next manual steps (REQUIRED before production):"
+echo "  1) Review backups in: $BACKUP_DIR"
+echo "  2) Run: find $WORK_DIR -name '*.php' -exec php -l {} \\;"
+echo "  3) Migrate mysql_* calls to PDO or mysqli (script only annotated)"
+echo "  4) Reintroduce proper authentication for admin pages (search for annotations)"
+echo "  5) Wire up routes/endpoints and test in dev environment"
+echo "  6) Review removed credits/licenses for legal compliance"
+echo ""
+echo "Files extracted to: $WORK_DIR"
+echo "Backups stored at: $BACKUP_DIR"
+echo "=========================================="
