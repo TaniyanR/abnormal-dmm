@@ -86,7 +86,6 @@ echo ""
 
 # 3) Neutralize admin token checks (conservative, annotated)
 echo "${YELLOW}[Patch] Neutralizing ADMIN_TOKEN/token checks (annotated)...${NC}"
-# Use find+while to avoid xargs/arg issues
 while IFS= read -r -d '' file; do
   # Replace standalone ADMIN_TOKEN tokens (word-boundary) with annotated true
   sed -i -E 's/\bADMIN_TOKEN\b/true \/* ADMIN_TOKEN removed by integration *\//g' "$file" || true
@@ -117,7 +116,7 @@ if [[ "$mysql_found" = true ]]; then
   echo "${YELLOW}[Patch] Adding TODO annotations for mysql_* usage...${NC}"
   while IFS= read -r -d '' file; do
     # If file already contains our TODO marker, skip
-    if grep -q "TODO: mysql_* usage detected" "$file"; then
+    if grep -q "TODO: mysql_* usage detected" "$file" 2>/dev/null; then
       continue
     fi
     first_line=$(head -n 1 "$file" || true)

@@ -4,22 +4,22 @@
 
 This directory contains tools and documentation for integrating the THK Analytics package (thk-analytics-124.zip) into the abnormal-dmm project. The approach is conservative and non-destructive: the automation creates backups of original files and applies only reversible, annotated changes to make the code easier to review and adapt to PHP 8+.
 
-## Integration Plan
+## Goals
 
-The integration follows a conservative, non-destructive approach:
-
-1. Extract the THK Analytics ZIP archive to `thirdparty/thk-analytics`.
+1. Extract `thk-analytics-124.zip` from the repository root into `thirdparty/thk-analytics`.
 2. Backup original PHP and HTML files to `thirdparty/thk-analytics-backups`.
-3. Apply conservative automated patches:
-   - Neutralize `ADMIN_TOKEN` checks (replace with annotated `true` to allow review; you must reintroduce proper auth).
-   - Remove visible copyright/credit lines (patterns: "Copyright", "THK Analytics", "Thought is free", "WEB SERVICE BY DMM.com") from views only.
-   - Add TODO comments for deprecated `mysql_*` function usage (script only annotates; no automatic DB-layer rewrite).
-4. Lint PHP files to detect syntax errors (`php -l`).
-5. Commit results to version control (automation pushes to `feature/integrate-thk-analytics-integrated` by default).
+3. Apply conservative, automated patches:
+   - Neutralize hardcoded admin token checks that may block integration (for review only).
+   - Remove visible copyright/credits lines from views.
+   - Add TODO comments where deprecated `mysql_*` functions are detected (annotations only).
+4. Validate with PHP linting (`php -l`).
+5. Document manual follow-ups required after automation.
+
+---
 
 ## Usage
 
-Two ways to run the integration: GitHub Actions (recommended for reproducibility) or the local script for manual testing.
+There are two ways to run the integration: GitHub Actions (recommended for reproducibility) or the local script (for testing / manual control).
 
 ### Option 1 — GitHub Actions (recommended)
 
@@ -53,6 +53,8 @@ Prerequisites:
 - PHP CLI (for linting)
 - `thk-analytics-124.zip` (or THK source dir)
 
+---
+
 ## What the automation does
 
 - Extracts archive into `thirdparty/thk-analytics/`, handling both flat and single-directory ZIPs.
@@ -62,6 +64,8 @@ Prerequisites:
 - Adds TODO comments for files using `mysql_*` functions; it does not attempt automatic conversion.
 - Runs `php -l` on PHP files and reports syntax issues (does not fail the entire run).
 - Optionally adds a minimal `composer.json` hint if none is present, to indicate PHP 8.0+.
+
+---
 
 ## Manual follow-ups (required)
 
@@ -97,6 +101,8 @@ After running the automation, the following manual tasks are mandatory before an
    - Check for XSS and unsafe file operations.
    - Test all features in a development environment.
 
+---
+
 ## File layout after integration (expected)
 
 ```
@@ -110,24 +116,29 @@ abnormal-dmm/
 │   └── import_and_patch.sh            # Helper script
 └── .github/
     └── workflows/
-        └── integrate-thk.yml
+        └── integrate-thk.yml          # Automation workflow
 ```
+
+---
 
 ## Rollback
 
-To revert to originals:
+To revert to the original state:
+
 ```bash
 rm -rf thirdparty/thk-analytics
 cp -a thirdparty/thk-analytics-backups/* thirdparty/thk-analytics/
-# or re-extract original:
+# or re-extract the original
 unzip thk-analytics-124.zip -d thirdparty/thk-analytics
 ```
 
-Also use Git history to inspect and revert changes if necessary:
+Also use `git` to inspect and revert commits if needed:
 ```bash
 git log --oneline -- thirdparty/
-git diff <commit> -- thirdparty/thk-analytics
+git checkout <commit> -- thirdparty/thk-analytics
 ```
+
+---
 
 ## Troubleshooting
 
@@ -141,8 +152,10 @@ git diff <commit> -- thirdparty/thk-analytics
 - Permission issues extracting files:
   - Ensure the runner or local user has write permissions to `thirdparty/`.
 
-- mysql_* still failing:
+- `mysql_*` still failing:
   - Ensure appropriate PHP extensions (`mysqli`, `pdo_mysql`) are available, but prefer migrating to PDO/mysqli APIs.
+
+---
 
 ## Contributing / Updating this integration
 
@@ -150,11 +163,15 @@ git diff <commit> -- thirdparty/thk-analytics
 - Keep patches conservative and non-destructive — always create backups.
 - Document any new automated patches in this README.
 
+---
+
 ## Support & License
 
 - THK Analytics may have separate license terms—review the original archive and backups for details.
 - For integration tooling issues: open an issue in this repository.
 - For THK Analytics functional issues: refer to THK documentation.
+
+---
 
 ## Next steps (suggested)
 - Run the import locally first, review diffs, then commit to `feature/integrate-thk-analytics-integrated`.
